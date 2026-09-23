@@ -1,0 +1,24 @@
+services:
+  arcane:
+    image: ghcr.io/getarcaneapp/manager:latest
+    restart: unless-stopped
+    group_add:
+      - ${GID:-}  # Replace with your host's Docker GID
+    ports:
+      - ${ARCANE_PORT:-3552}:3552
+    environment:
+      APP_URL: ${ARCANE_URL:-http://${ROOT_DOMAIN:-homelab.lan}}
+      ENCRYPTION_KEY: ${ARCANE_ENCRYPTION_KEY}
+      PROJECTS_DIRECTORY: ${STACKS_DIR:-/opt/stacks}
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: [CMD, /app/arcane, health]
+    labels:
+      arcane.icon: arcane
+      # dockhand.url: ${ARCANE_URL:-http://arcane.${ROOT_DOMAIN:-homelab.lan}}
+      traefik.enable: true
+      traefik.http.routers.arcane.entrypoints: https
+      traefik.http.routers.arcane.observability.accessLogs: false
+      traefik.http.routers.arcane.rule: Host(`${ARCANE_DOMAIN:-arcane.${ROOT_DOMAIN:-homelab.lan}}`)
+      traefik.http.services.arcane.loadbalancer.server.port: 3552

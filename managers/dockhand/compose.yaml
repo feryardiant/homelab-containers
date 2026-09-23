@@ -1,0 +1,21 @@
+services:
+  dockhand:
+    image: docker.io/fnsys/dockhand:latest
+    restart: unless-stopped
+    group_add:
+      - ${GID:-}  # Replace with your host's Docker GID
+    ports:
+      - ${DOCKHAND_PORT:-3000}:3000
+    environment:
+      ENCRYPTION_KEY: ${DOCKHAND_ENCRYPTION_KEY}
+      STACKS_DIR: ${STACKS_DIR:-/opt/stacks}
+    volumes:
+      - ./data:/app/data
+    labels:
+      arcane.icon: dockhand
+      # dockhand.url: ${DOCKHAND_URL:-http://dockhand.${ROOT_DOMAIN:-homelab.lan}}
+      traefik.enable: true
+      traefik.http.routers.dockhand.entrypoints: https
+      traefik.http.routers.dockhand.observability.accessLogs: false
+      traefik.http.routers.dockhand.rule: Host(`${DOCKHAND_DOMAIN:-dockhand.${ROOT_DOMAIN:-homelab.lan}}`)
+      traefik.http.services.dockhand.loadbalancer.server.port: 3000

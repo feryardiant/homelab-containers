@@ -1,0 +1,45 @@
+x-arcane:
+  icon: traefik
+
+services:
+  traefik:
+    image: docker.io/traefik:3.7
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-}
+    ports:
+      - 80:80
+      - 443:443
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    environment:
+      TZ: ${TZ:-}
+      ROOT_DOMAIN: ${ROOT_DOMAIN:-homelab.lan}
+      ALLOWED_IP_RANGES: ${ALLOWED_IP_RANGES:-10.10.0.0/24}
+      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN:-}
+    volumes:
+      - ./config/traefik:/etc/traefik:ro # Volume to store the Traefik configuration
+      - ./config/letsencrypt:/etc/letsencrypt # Volume to store the Let's Encrypt certificates
+      - ./logs:/var/log/traefik # Volume to store Traefik logs
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: [CMD, traefik, healthcheck]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    labels:
+      arcane.icon: traefik
+      traefik.enable: true
+      traefik.http.routers.traefik.entrypoints: https
+      traefik.http.routers.traefik.observability.accessLogs: false
+      traefik.http.routers.traefik.rule: Host(`${TRAEFIK_DOMAIN:-traefik.${ROOT_DOMAIN:-homelab.lan}}`)
+      traefik.http.routers.traefik.tls.domains[0].main: ${ROOT_DOMAIN:-homelab.lan}
+      traefik.http.routers.traefik.tls.domains[0].sans: "*.${ROOT_DOMAIN:-homelab.lan}"
+      traefik.http.routers.traefik.service: api@internal
+
+networks:
+  default:
+    name: shared
+    external: true

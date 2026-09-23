@@ -1,0 +1,90 @@
+x-environment: &environment
+  PUID: ${PUID:-}
+  PGID: ${PGID:-}
+  TZ: ${TZ:-}
+
+x-deploy: &deploy
+  resources:
+    limits:
+      cpus: '1.0'
+      memory: 512M
+    reservations:
+      cpus: '0.1'
+      memory: 128M
+
+x-healthcheck: &healthcheck
+  interval: 10s
+  timeout: 5s
+  retries: 3
+
+x-volumes: &volumes
+  - ${MANAGERS_DIR:-/opt/managers}:${MANAGERS_DIR:-/opt/managers}
+  - ${STACKS_DIR:-/opt/stacks}:${STACKS_DIR:-/opt/stacks}
+  - /var/run/docker.sock:/var/run/docker.sock
+  - /etc/localtime:/etc/localtime:ro
+  - /sys/fs/cgroup:/sys/fs/cgroup:ro
+
+services:
+  arcane:
+    extends:
+      file: arcane/compose.yaml
+      service: arcane
+    container_name: arcane
+    depends_on:
+      manager-db:
+        condition: service_healthy
+    environment:
+      <<: *environment
+      DATABASE_URL: postgres://postgres:${DB_PASS:-secret}@manager-db:5432/arcane
+    volumes: *volumes
+    healthcheck: *healthcheck
+    deploy: *deploy
+
+  dockhand:
+    extends:
+      file: dockhand/compose.yaml
+      service: dockhand
+    container_name: dockhand
+    depends_on:
+      manager-db:
+        condition: service_healthy
+    environment:
+      <<: *environment
+      DATABASE_URL: postgres://postgres:${DB_PASS:-secret}@manager-db:5432/dockhand
+    volumes: *volumes
+    deploy: *deploy
+
+  dbx:
+    extends:
+      file: dbx/compose.yaml
+      service: dbx
+    container_name: dbx
+    depends_on:
+      manager-db:
+        condition: service_healthy
+    environment: *environment
+    deploy: *deploy
+
+  manager-db:
+    image: docker.io/postgres:17.11-alpine
+    container_name: manager-db
+    restart: unless-stopped
+    environment:
+      <<: *environment
+      POSTGRES_PASSWORD: ${DB_PASS:-secret}
+    volumes:
+      - ./shared/init-db.sh:/docker-entrypoint-initdb.d/10-init-db.sh
+      - ./shared/db:/var/lib/postgresql/data
+      - /etc/localtime:/etc/localtime:ro
+      - /usr/share/zoneinfo:/usr/share/zoneinfo:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      <<: *healthcheck
+    deploy: *deploy
+    labels:
+      arcane.icon: postgresql
+
+networks:
+  default:
+    name: shared
+    external: true

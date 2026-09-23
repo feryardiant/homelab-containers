@@ -1,0 +1,18 @@
+services:
+  dbx:
+    image: docker.io/t8y2/dbx:latest
+    container_name: dbx
+    restart: unless-stopped
+    ports:
+      - ${DBX_PORT:-4224}:4224
+    volumes:
+      - ./data:/app/data
+      - /etc/localtime:/etc/localtime:ro
+    labels:
+      arcane.icon: dbx
+      # dockhand.url: ${DBX_DOMAIN:-dbx.${ROOT_DOMAIN:-homelab.lan}}
+      traefik.enable: true
+      traefik.http.routers.dbx.entrypoints: https
+      traefik.http.routers.dbx.observability.accessLogs: false
+      traefik.http.routers.dbx.rule: Host(`${DBX_DOMAIN:-dbx.${ROOT_DOMAIN:-homelab.lan}}`)
+      traefik.http.services.dbx.loadbalancer.server.port: 4224

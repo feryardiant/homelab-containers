@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=https://www.schemastore.org/traefik-v3.json
+
+global:
+  sendAnonymousUsage: false
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      dnsChallenge:
+        provider: cloudflare
+        resolvers:
+          - 1.1.1.1:53
+          - 1.0.0.1:53
+      storage: /etc/letsencrypt/acme.json
+
+entryPoints:
+  http:
+    address: :80
+    http:
+      # New directive since Traefik v3.7.12
+      # yaml-language-server-disable Property aliasHeadersStrategy is not allowed
+      aliasHeadersStrategy: delete
+      redirections:
+        entryPoint:
+          to: https
+          scheme: https
+  https:
+    address: :443
+    http:
+      # yaml-language-server-disable Property aliasHeadersStrategy is not allowed
+      aliasHeadersStrategy: delete
+      middlewares:
+        - default-allowlist@file
+        - default-headers@file
+      tls:
+        certResolver: letsencrypt
+
+providers:
+  docker:
+    endpoint: unix:///var/run/docker.sock
+    exposedByDefault: false
+    network: shared
+
+  file:
+    directory: /etc/traefik/providers
+    watch: true
+
+api:
+  dashboard: true
+
+ping:
+  entryPoint: http
+
+log:
+  format: json
+  level: INFO
+
+accessLog:
+  filePath: /var/log/traefik/access.log
+  format: json
+  filters:
+    statusCodes:
+      # - "200"
+      - "400-404"
+      - "500-503"
+  fields:
+    names:
+      StartUTC: drop
+
+serversTransport:
+  insecureSkipVerify: true
