@@ -1,0 +1,62 @@
+{
+  "title": "Host System",
+  "uid": "host-system",
+  "tags": ["host", "systemd", "ssh", "security"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "version": 1,
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "title": "SSH Authentication",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "{job=\"systemd\"} |~ \"Accepted password|Accepted publickey\"",
+          "legendFormat": "Success"
+        },
+        {
+          "expr": "{job=\"systemd\"} |~ \"Failed password|Failed publickey|authentication failure|Invalid user\"",
+          "legendFormat": "Failed"
+        }
+      ]
+    },
+    {
+      "title": "Sudo Commands",
+      "type": "logs",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [{ "expr": "{job=\"systemd\"} |~ \"COMMAND=|sudo\"", "legendFormat": "sudo" }]
+    },
+    {
+      "title": "Systemd Service Events",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        { "expr": "{job=\"systemd\"} |~ \"Started|Stopped\"", "legendFormat": "Started/Stopped" },
+        {
+          "expr": "{job=\"systemd\"} |~ \"Failed to (start|stop|reload)|Failed with result|entered failed state\"",
+          "legendFormat": "Failed"
+        }
+      ]
+    },
+    {
+      "title": "CUPS Print Jobs",
+      "type": "logs",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [{ "expr": "{job=\"systemd\"} |= \"cups\"", "legendFormat": "cups" }]
+    },
+    {
+      "title": "Network Connections (kernel)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 8 },
+      "datasource": "Loki",
+      "targets": [{ "expr": "{job=\"systemd\"} |~ \"TCP|UDP\"", "legendFormat": "connections" }]
+    }
+  ]
+}

@@ -1,0 +1,137 @@
+{
+  "title": "OpenWrt",
+  "uid": "openwrt",
+  "tags": ["openwrt", "network", "dns", "dhcp", "firewall", "wifi"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "version": 1,
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "title": "DHCP Events",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum by (dhcp_action) (count_over_time({app=\"dnsmasq-dhcp\"} | regexp \"^(?P<dhcp_action>DHCP[A-Z]+)\\\\((?P<dhcp_iface>[^)]+)\\\\) (?:(?P<dhcp_ip>\\\\S+) )?(?P<dhcp_mac>\\\\S+)\" [5m]))",
+          "legendFormat": "{{dhcp_action}}"
+        }
+      ]
+    },
+    {
+      "title": "Active DHCP Leases",
+      "type": "table",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum by (dhcp_hostname, dhcp_ip, dhcp_mac) (count_over_time({app=\"dnsmasq-dhcp\"} |= \"DHCPACK\" | regexp \"^(?P<dhcp_action>DHCP[A-Z]+)\\\\((?P<dhcp_iface>[^)]+)\\\\) (?P<dhcp_ip>\\\\S+) (?P<dhcp_mac>\\\\S+) (?P<dhcp_hostname>.+)?\" [6h]))",
+          "legendFormat": "leases",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "title": "DNS Queries - Top Domains",
+      "type": "barchart",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "topk(20, sum by (dns_domain) (count_over_time({app=~\"dnsmasq|dnscrypt-proxy\"} |~ \"query\\\\[|forwarded |cached |reply |config \" | regexp \"^(?:\\\\d+ \\\\S+/\\\\d+ )?(?P<dns_action>query|forwarded|cached|reply|config)(?:\\\\[(?P<dns_qtype>[A-Za-z0-9]+)\\\\])? (?P<dns_domain>\\\\S+)\" | dns_domain =~ \".+\" [6h])))",
+          "legendFormat": "top domains",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "title": "DNS Query Types",
+      "type": "piechart",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum by (dns_qtype) (count_over_time({app=~\"dnsmasq|dnscrypt-proxy\"} |= \"query[\" | regexp \"^(?:\\\\d+ \\\\S+/\\\\d+ )?(?P<dns_action>query|forwarded|cached|reply|config)(?:\\\\[(?P<dns_qtype>[A-Za-z0-9]+)\\\\])? (?P<dns_domain>\\\\S+)\" | dns_qtype =~ \".+\" [6h]))",
+          "legendFormat": "{{dns_qtype}}",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "title": "Firewall Drops",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum by (proto, dst_port) (count_over_time({app=\"kernel\"} |= \"drop\" | regexp \"IN=(?P<in_if>\\\\S*) OUT=(?P<out_if>\\\\S*) .* PROTO=(?P<proto>[A-Za-z0-9]+)(?: SPT=(?P<src_port>\\\\d+) DPT=(?P<dst_port>\\\\d+))?\" [5m]))",
+          "legendFormat": "{{proto}}/{{dst_port}}"
+        }
+      ]
+    },
+    {
+      "title": "Top Source IPs (Firewall)",
+      "type": "barchart",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "topk(20, sum by (src_ip) (count_over_time({app=\"kernel\"} |= \"drop\" | regexp \"SRC=(?P<src_ip>[^\\\\s]+)\" [6h])))",
+          "legendFormat": "{{src_ip}}",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "title": "WiFi Associations",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum by (wifi_event, wifi_state) (count_over_time({app=\"hostapd\"} | regexp \"(?P<wifi_event>AP-STA-(CONNECTED|DISCONNECTED)|STA .* IEEE 802\\\\.11: (?P<wifi_state>associated|authenticated|disassociated|deauthenticated))\" [5m]))",
+          "legendFormat": "{{wifi_event}} {{wifi_state}}"
+        }
+      ]
+    },
+    {
+      "title": "MWAN3 Interface Status",
+      "type": "table",
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum by (mwan3_iface, mwan3_state, mwan3_score) (count_over_time({app=\"mwan3track\"} | regexp \"^(?:Check \\\\((?P<mwan3_check>[a-z]+)\\\\) (?P<mwan3_result>failed|success) for target \\\"(?P<mwan3_target>[^\\\"]+)\\\" on interface (?P<mwan3_iface>\\\\S+) \\\\((?P<mwan3_device>[^)]+)\\\\)\\\\. Current score: (?P<mwan3_score>\\\\d+)|Lost (?P<mwan3_lost>\\\\d+) ping\\\\(s\\\\) on interface (?P<mwan3_iface2>\\\\S+) \\\\((?P<mwan3_device2>[^)]+)\\\\)\\\\. Current score: (?P<mwan3_score2>\\\\d+)|Interface (?P<mwan3_iface3>\\\\S+) \\\\((?P<mwan3_device3>[^)]+)\\\\) is (?P<mwan3_state>.+)|Execute (?P<mwan3_event>connected|disconnected) event on interface (?P<mwan3_iface4>\\\\S+) \\\\((?P<mwan3_device4>[^)]+)\\\\))$\" [6h]))",
+          "legendFormat": "{{mwan3_iface}}",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "title": "dnscrypt-proxy Actions",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 32, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum by (dns_action) (count_over_time({app=\"dnscrypt-proxy\"} | regexp \"^(?:time:(?P<dns_ts>\\\\d+)\\\\thost:(?P<dns_client>[^\\\\t]+)\\\\tmessage:(?P<dns_domain>[^\\\\t]+)\\\\ttype:(?P<dns_qtype>[^\\\\t]+)\\\\treturn:(?P<dns_return>[^\\\\t]+)\\\\tcached:(?P<dns_cached>\\\\d+)\\\\tduration:(?P<dns_duration>\\\\d+)\\\\tserver:(?P<dns_server>[^\\\\t]*)|time:(?P<dns_ts2>\\\\d+)\\\\thost:(?P<dns_client2>[^\\\\t]+)\\\\tmessage:(?P<dns_domain2>[^\\\\t]+)\\\\ttype:(?P<dns_qtype2>[^\\\\t]+)|time:(?P<dns_ts3>\\\\d+)\\\\thost:(?P<dns_client3>[^\\\\t]+)\\\\tqname:(?P<dns_domain3>[^\\\\t]+)\\\\tmessage:(?P<dns_reason>.*)|^\\\\[(?P<dns_ts4>[^\\\\]]+)\\\\]\\\\t(?P<dns_client4>[^\\\\t]+)\\\\t(?P<dns_domain4>[^\\\\t]+)\\\\t(?P<dns_reason2>.*))$\" [5m]))",
+          "legendFormat": "{{dns_action}}"
+        }
+      ]
+    },
+    {
+      "title": "Dropbear SSH Events",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 32, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum by (db_event) (count_over_time({app=\"dropbear\"} | regexp \"(?P<db_event>Child connection from|auth succeeded|Bad password attempt|Login attempt|bad signature|Too-long password|rejected|is locked|blank password|Exit \\\\(|Pubkey auth|Password auth)\" [5m]))",
+          "legendFormat": "{{db_event}}"
+        }
+      ]
+    }
+  ]
+}

@@ -5,6 +5,12 @@
   - [Dockhand](https://dockhand.pro/)
   - [DBX](https://dbxio.com/en)
   - [PostgreSQL](https://www.postgresql.org/)
+- [LGTM](stacks/grafana)
+  - [Grafana](https://grafana.com/)
+  - [Prometheus](https://prometheus.io/)
+  - [Alloy](https://grafana.com/oss/alloy/)
+  - [Loki](https://grafana.com/oss/loki/)
+  - [Tempo](https://grafana.com/oss/tempo/)
 - [Traefik](stacks/traefik)
 
 ### Setup
