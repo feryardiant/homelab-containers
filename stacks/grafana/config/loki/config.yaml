@@ -1,0 +1,45 @@
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  # dashboard panels do high-cardinality topk() over firewall logs (dst_port, src_ip)
+  max_query_series: 20000
+  # Giant lines (arcane slow-query SQL ≈163KB) blow Loki's 4MB gRPC query-response
+  # cap: raw fetches past ~25 such lines fail with ResourceExhausted — Drilldown's
+  # logs list (limit=1000), Explore, and check.sh all hit it. Cap lines at 3KB so
+  # a full limit=1000 response (1000 × ~3.2KB incl. JSON/ts overhead) ≈ 3.3MB < 4MB.
+  # Truncate (never discard); complete lines remain in docker's json-file logs.
+  # 4096 would still fail (≈4.2MB at limit=1000); lower to 2048 if margin runs hot.
+  max_line_size: 3072
+  max_line_size_truncate: true
+  max_line_size_truncate_identifier: "...[truncated]"
+
+table_manager:
+  retention_deletes_enabled: true
+  retention_period: 30d

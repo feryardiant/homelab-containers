@@ -1,0 +1,24 @@
+{
+  "title": "Distributed Tracing",
+  "uid": "distributed-tracing",
+  "tags": ["tempo", "traces", "otlp", "latency", "errors"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "version": 1,
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "title": "Trace Volume by Service",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 8 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum by (service_name) (rate(tempo_distributor_spans_received_total[5m]))",
+          "legendFormat": "{{service_name}}"
+        }
+      ]
+    }
+  ]
+}

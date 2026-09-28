@@ -1,0 +1,45 @@
+{
+  "title": "Managers Suite",
+  "uid": "managers",
+  "tags": ["managers", "docker", "containers", "arcane", "dockhand", "dbx", "stacks"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "version": 1,
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "title": "Arcane - Stack Deployments",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [{ "expr": "{service_name=\"arcane\"}", "legendFormat": "arcane" }]
+    },
+    {
+      "title": "Dockhand - Stack Operations",
+      "type": "logs",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [{ "expr": "{service_name=\"dockhand\"}", "legendFormat": "dockhand" }]
+    },
+    {
+      "title": "DBX - Database Operations",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [{ "expr": "{service_name=\"dbx\"}", "legendFormat": "dbx" }]
+    },
+    {
+      "title": "Stack Directory Changes",
+      "type": "logs",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "{job=\"docker\"} | project=~\"managers|arcane|dockhand|dbx\"",
+          "legendFormat": "stack ops"
+        }
+      ]
+    }
+  ]
+}

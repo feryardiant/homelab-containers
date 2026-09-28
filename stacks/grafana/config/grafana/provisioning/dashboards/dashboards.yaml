@@ -1,0 +1,38 @@
+apiVersion: 1
+
+providers:
+  - name: "Host"
+    folder: "Host"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/host
+
+  - name: "Container Stacks"
+    folder: "Container Stacks"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/container-stacks
+
+  - name: "Networks"
+    folder: "Networks"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/networks
+
+  - name: "Distributed Tracing"
+    folder: "Distributed Tracing"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/distributed-tracing

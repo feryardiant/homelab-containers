@@ -1,0 +1,79 @@
+{
+  "title": "Container Stacks Overview",
+  "uid": "container-stacks",
+  "tags": ["docker", "containers", "stacks", "logs"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "version": 1,
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "title": "Container Count by Stack",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "count by (project) (count by (project, container_name) (count_over_time({job=\"docker\", project=~\".+\"} [1h])))",
+          "legendFormat": "{{project}}"
+        }
+      ]
+    },
+    {
+      "title": "Container Count by Service",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "count by (service_name) (count by (service_name, container_name) (count_over_time({job=\"docker\", service_name=~\".+\"} [1h])))",
+          "legendFormat": "{{service_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Log Volume by Service (lines/min)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum by (service_name) (rate({job=\"docker\"} [5m]))",
+          "legendFormat": "{{service_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Error Rate by Service",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum by (service_name) (rate({job=\"docker\"} |= \"error\" [5m]))",
+          "legendFormat": "{{service_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Warning Rate by Service",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum by (service_name) (rate({job=\"docker\"} |= \"warn\" [5m]))",
+          "legendFormat": "{{service_name}}"
+        }
+      ]
+    },
+    {
+      "title": "Recent Container Logs",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 10 },
+      "datasource": "Loki",
+      "targets": [{ "expr": "{job=\"docker\"}", "legendFormat": "{{service_name}}" }]
+    }
+  ]
+}
