@@ -9,22 +9,23 @@ Homelab Docker Compose monorepo: a container-manager suite and deployable stacks
 
 ## Deployment reality
 
-- The clone is **symlinked** to `/opt/managers` and `/opt/stacks`; READMEs and compose defaults assume those paths.
+- On the deploy host(s) (see *Deployment targets* below) the clone is **symlinked** to `/opt/managers` and `/opt/stacks`; READMEs and compose defaults assume those paths.
 - All services join an **external** user-defined bridge network named `shared` (create once: `docker network create -d bridge --attachable shared`).
 - Runtime state (`*/data/`, `*/config/`, `*/logs/`, etc.) and `.env` files are gitignored. Keep empty placeholder dirs with a `.gitignore` containing `*` and `!.gitignore`.
 
-### Docker command gate
+### Deployment targets — `.agents/deployments.jsonc`
 
-Before running any Docker command other than `docker compose config`, check whether this clone is deployed on this device:
+All runtime work happens on a deploy host, never on this machine.
 
-```sh
-test -e /opt/managers && test -e /opt/stacks
-```
-
-Either form counts — real directories or symlinks both pass.
-
-- **Both exist** — full Docker access is allowed: `docker run`, `docker compose up/down/logs`, etc. Use it to test, check, and verify that changes to any stack actually work (bring it up, inspect logs, confirm behavior).
-- **Either missing** (e.g. a dev laptop) — `docker compose config` is the **only** permitted Docker command. No `docker run`, no `docker compose up/down/stop/restart`, no read-only inspection. Instead, finish your task with a handoff to the human: *"Here's what you need to verify once you've deployed the changes"* — a checklist of the exact commands/logs/URLs to check after deploying on the real device.
+- The file is gitignored, machine-local, and **required**. Entries look like `{ "host", "proto", "deploy": "rsync"|"clone", "maps": { "<local rel>": "<remote abs>" } }`. If it does not exist, stop and ask the human to create one before proceeding — never assume a target and never skip the check.
+- **This clone is edit-only.** The only permitted local Docker command is `docker compose config`. No `docker run`, no `docker compose up/down/stop/restart/logs/ps`, no local inspection — not even a quick test. (Having `/opt/...` on this device grants nothing; go over ssh.)
+- **Resolve the target before acting** — find the host(s) whose `maps` contains the path you're changing:
+  - one match, or the human named a host → use it;
+  - several matches and the human named hosts → do each mapped host in turn;
+  - several matches, no host named → ask;
+  - no match → touch no host: edit, `docker compose config`, then finish with a handoff to the human — *"Here's what you need to deploy and verify once the path is added to `.agents/deployments.jsonc`"* — a checklist of the exact rsync/ssh commands, logs, and URLs.
+- **Deploy** only the mapped dir, e.g. `rsync -a --exclude .env --exclude data/ --exclude logs/ <local>/ <host>:<remote>/`. Never `--delete`, never push `.env` or runtime state — mapped dirs share a schema, not secrets or per-host config. Follow the entry's `deploy` method; if it isn't a method you know, ask.
+- **Run and verify over ssh:** `ssh <host> 'cd <remote> && docker compose up -d'`, same shape for `logs`, `ps`, and any stack scripts (`scripts/check.sh`).
 
 ## Compose conventions (apply to everything you add)
 
@@ -41,7 +42,7 @@ Either form counts — real directories or symlinks both pass.
 
 ## Workflow
 
-- Validate with `docker compose config -f <file>`. Runtime inspection (`docker compose logs -f`) only on a device that passes the Docker command gate above.
+- Validate with `docker compose config -f <file>`. Runtime inspection (`docker compose logs -f`) runs over ssh on the mapped host per *Deployment targets* above — never locally.
 - Adding a stack = new `stacks/<name>/` dir with `compose.yaml`, `.env.example`, `README.md` per the conventions above.
 
 ## Style
