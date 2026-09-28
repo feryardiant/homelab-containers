@@ -74,11 +74,42 @@ else
   C_PASS_B=""; C_WARN_B=""; C_FAIL_B=""; C_RESET=""
 fi
 
-section() { printf '\n%s== %s ==%s\n' "$C_SECTION" "$*" "$C_RESET"; }
+_GROUP_OPEN=0
+section() {
+    if [ -v CI ]; then
+        if [ "$_GROUP_OPEN" -eq 1 ]; then
+            echo "::endgroup::"
+            _GROUP_OPEN=0
+        fi
+
+        printf '\n::group::%s\n' "$*";
+        _GROUP_OPEN=1
+    else
+        printf '\n%s== %s ==%s\n' "$C_SECTION" "$*" "$C_RESET";
+    fi
+}
 ok()   { printf '  [%sPASS%s] %s\n' "$C_PASS" "$C_RESET" "$*"; PASS=$((PASS+1)); }
-wn()   { printf '  [%sWARN%s] %s\n' "$C_WARN" "$C_RESET" "$*"; WARN=$((WARN+1)); }
-bad()  { printf '  [%sFAIL%s] %s\n' "$C_FAIL" "$C_RESET" "$*"; FAIL=$((FAIL+1)); }
-info() { printf '         %s\n' "$*"; }
+info() {
+    if [ -v CI ]; then
+        # echo "::notice file={name},line={line},endLine={endLine},title={title}::$*"
+        echo "::notice::$*"
+    fi
+    printf '         %s\n' "$*";
+}
+wn() {
+    if [ -v CI ]; then
+        # echo "::warning file={name},line={line},endLine={endLine},title={title}::$*"
+        echo "::warning::$*"
+    fi
+    printf '  [%sWARN%s] %s\n' "$C_WARN" "$C_RESET" "$*"; WARN=$((WARN+1));
+}
+bad() {
+    if [ -v CI ]; then
+        # echo "::error file={name},line={line},endLine={endLine},title={title}::$*"
+        echo "::error::$*"
+    fi
+    printf '  [%sFAIL%s] %s\n' "$C_FAIL" "$C_RESET" "$*"; FAIL=$((FAIL+1));
+}
 
 # --------------------------------------------------------------- one stack
 validate_stack() {
@@ -88,13 +119,25 @@ validate_stack() {
   section "$name"
 
   # 1 — compose config parses
-  out="$(cd "$dir" && docker compose config --format json 2>&1)"; rc=$?
-  if [ "$rc" -eq 0 ] && [ -n "$out" ]; then
+  #
+  # stderr is captured SEPARATELY: compose emits warnings (unset variable,
+  # obsolete attribute, ...) on stderr with rc=0, and merging them into the
+  # JSON would make every jq check below fail to parse — whose empty result
+  # is then treated as PASS (silent false-green).
+  local errf err
+  errf="$(mktemp "${TMPDIR:-/tmp}/validate-compose.XXXXXX")"
+  out="$(cd "$dir" && docker compose config --format json 2>"$errf")"; rc=$?
+  err="$(cat "$errf" 2>/dev/null)"; rm -f "$errf"
+  if [ "$rc" -ne 0 ] || [ -z "$out" ]; then
+    bad "docker compose config failed: $(printf '%s\n%s' "$err" "$out" | head -1)"
+    info "config-derived checks below are skipped"
+  else
     ok "docker compose config parses"
     json="$out"
-  else
-    bad "docker compose config failed: $(printf '%s' "$out" | head -1)"
-    info "config-derived checks below are skipped"
+    if [ -n "$err" ]; then
+      wn "docker compose config warned: $(printf '%s' "$err" | head -1)"
+      info "config-derived checks below still ran on the parsed JSON"
+    fi
   fi
 
   # 2 — default network declared; a network named 'shared' must be external
@@ -286,6 +329,9 @@ done
 
 section "summary"
 printf '  stacks checked: %s%d%s\n' "$C_SECTION" "$checked" "$C_RESET"
+if [ -v CI ]; then
+    echo "::endgroup::"
+fi
 printf '  %sPASS=%d%s  %sWARN=%d%s  %sFAIL=%d%s\n' \
   "$C_PASS_B" "$PASS" "$C_RESET" "$C_WARN_B" "$WARN" "$C_RESET" "$C_FAIL_B" "$FAIL" "$C_RESET"
 if [ "$FAIL" -gt 0 ]; then
