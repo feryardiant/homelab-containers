@@ -141,7 +141,7 @@ Traces then show up in Grafana (Explore → Tempo → Search).
 | `scripts/check.sh` | Full suite: validates every provisioned dashboard's queries against the live backends — PASS/WARN/FAIL summary, exit `0` (clean) / `1` (failures) / `2` (usage/setup error). Subcommands: `probe <loki\|prom\|tempo\|tempo-search\|tempo-metrics> <expr>` (raw response for one query) and `file <dashboard.json>` (every target expr — pre-deploy validation) |
 | `scripts/audit.sh` | Read-only stack health audit (`--push` adds harmless write probes, `--quick` for a fast pass) |
 
-All scripts run on the deploy host: `cd /opt/stacks/grafana && scripts/<name>`.
+All these scripts run on the deploy host: `cd /opt/stacks/grafana && scripts/<name>`. The generic compose convention checks (default network, image tags, resource limits, `.env.example` coverage, Traefik labels) live in the repo-root `scripts/validate.sh` — run that one locally before deploying.
 
 ## Operations
 
@@ -154,6 +154,6 @@ docker compose up -d              # apply
 ```
 
 - First setup: `cp .env.example .env`, edit, `docker compose up -d`.
-- Local copy is the single source of truth (ruling 2026-09-28); deploy local → remote with `rsync -a --exclude-from=.agents/grafana-deploy-excludes.txt stacks/grafana/ internal.lan:/opt/stacks/grafana/` (never `--delete`; `README.md` is included so both copies stay identical).
+- Local copy is the single source of truth (ruling 2026-09-28); validate first with `./scripts/validate.sh grafana` (repo root), then deploy local → remote with `rsync -a --exclude-from=.agents/grafana-deploy-excludes.txt stacks/grafana/ internal.lan:/opt/stacks/grafana/` (never `--delete`; `README.md` is included so both copies stay identical).
 - Only two host-published data ports: Tempo OTLP (`4317`/`4318` tcp) and Alloy syslog (`514` udp); all web UIs are Traefik-only.
 - Loki truncates log lines at **3072 B** (`limits_config.max_line_size` + `max_line_size_truncate`, identifier `...[truncated]`). Giant lines (arcane slow-query SQL was ~163 KB) tripped Loki's 4 MB gRPC query-response cap and broke every raw-line fetch — Drilldown's logs list (`limit=1000`), Explore, check.sh — with `ResourceExhausted`. Full-length lines remain in docker's json-file logs (`docker logs arcane`). Lines ingested before the 2026-09-28 change stay giant until they age out of the query window (~2 h at arcane's rate).

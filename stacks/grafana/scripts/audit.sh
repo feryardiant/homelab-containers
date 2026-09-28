@@ -33,11 +33,26 @@ test -e /opt/stacks || { echo "not the deploy host (/opt/stacks missing); aborti
 CURL_IMAGE=curlimages/curl:8.7.1
 PASS=0; WARN=0; FAIL=0
 
-ok()   { printf '  [PASS] %s\n' "$*"; PASS=$((PASS+1)); }
-wn()   { printf '  [WARN] %s\n' "$*"; WARN=$((WARN+1)); }
-bad()  { printf '  [FAIL] %s\n' "$*"; FAIL=$((FAIL+1)); }
+# Colors only on a TTY with NO_COLOR unset, so pipes/logs stay plain.
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  C_SECTION=$'\033[1;34m'  # bold blue
+  C_PASS=$'\033[32m'       # green
+  C_WARN=$'\033[33m'       # yellow
+  C_FAIL=$'\033[31m'       # red
+  C_PASS_B=$'\033[1;32m'   # bold green (summary counts / result)
+  C_WARN_B=$'\033[1;33m'   # bold yellow
+  C_FAIL_B=$'\033[1;31m'   # bold red
+  C_RESET=$'\033[0m'
+else
+  C_SECTION=""; C_PASS=""; C_WARN=""; C_FAIL=""
+  C_PASS_B=""; C_WARN_B=""; C_FAIL_B=""; C_RESET=""
+fi
+
+ok()   { printf '  %s[PASS]%s %s\n' "$C_PASS" "$C_RESET" "$*"; PASS=$((PASS+1)); }
+wn()   { printf '  %s[WARN]%s %s\n' "$C_WARN" "$C_RESET" "$*"; WARN=$((WARN+1)); }
+bad()  { printf '  %s[FAIL]%s %s\n' "$C_FAIL" "$C_RESET" "$*"; FAIL=$((FAIL+1)); }
 info() { printf '         %s\n' "$*"; }
-section() { printf '\n== %s ==\n' "$*"; }
+section() { printf '\n%s== %s ==%s\n' "$C_SECTION" "$*" "$C_RESET"; }
 
 # curl against a container on the shared network. Prints "<code> <curl-exit>".
 # code is 000 when the connection failed before an HTTP response.
@@ -74,11 +89,8 @@ printf 'stack dir: %s\n' "$STACK_DIR"
 # ---------------------------------------------------------------- compose.json
 section "Compose & static files"
 CMPSVC_JSON=$(docker compose config --format json 2>/dev/null)
-if [ -n "$CMPSVC_JSON" ]; then
-  ok "docker compose config validates"
-else
-  bad "docker compose config failed"
-fi
+# Generic convention checks (config validity, network, tags, limits, .env
+# coverage) live in scripts/validate.sh — run it locally before deploying.
 
 missing=""
 for f in compose.yaml .env .env.example config/grafana/grafana.ini \
@@ -91,25 +103,6 @@ else bad "missing:$missing"; fi
 for f in README.md scripts/check.sh; do
   [ -e "$f" ] || wn "optional file missing: $f"
 done
-
-# Network: default network must be the external shared bridge.
-NET=$(echo "$CMPSVC_JSON" | jq -r '.networks.default.name // empty')
-NET_EXT=$(echo "$CMPSVC_JSON" | jq -r '.networks.default.external // false')
-if [ "$NET" = "shared" ] && [ "$NET_EXT" = "true" ]; then
-  ok "default network = external 'shared'"
-else
-  bad "default network is '${NET:-<unnamed>}' external=$NET_EXT (expected shared/external)"
-fi
-
-# Image tags: no :latest allowed by convention.
-LATEST=$(echo "$CMPSVC_JSON" | jq -r '.services|to_entries[]|select(.value.image|endswith(":latest"))|.key')
-if [ -z "$LATEST" ]; then ok "all images use explicit tags"
-else for s in $LATEST; do wn "service $s uses image :latest (pin major.minor)"; done; fi
-
-# Resource limits.
-NOLIM=$(echo "$CMPSVC_JSON" | jq -r '.services|to_entries[]|select(.value.deploy.resources.limits==null)|.key')
-if [ -z "$NOLIM" ]; then ok "all services declare deploy.resources.limits"
-else for s in $NOLIM; do wn "service $s has no deploy.resources.limits"; done; fi
 
 # Published host ports: Web UIs stay Traefik-only; data intake ports are required.
 PORTS=$(echo "$CMPSVC_JSON" | jq -r '.services|to_entries[]|"\(.key): "+((.value.ports//[])|.[]|"\(.protocol) \(.published) -> \(.target)")')
@@ -144,19 +137,6 @@ for s in grafana prometheus grafana-tempo grafana-alloy; do
     bad "traefik labels incomplete for $s (enable=$EN entrypoints=${EP:-?})"
   fi
 done
-
-# .env.example coverage of live (non-commented) interpolations in compose.yaml.
-LIVE_VARS=$(grep -E '^[^#]*\$\{' compose.yaml | grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*' | sed 's/${//' | sort -u)
-ENVX_KEYS=$(grep -oE '^[A-Za-z_][A-Za-z0-9_]*' .env.example | sort -u)
-GAP=$(comm -23 <(echo "$LIVE_VARS") <(echo "$ENVX_KEYS") | tr '\n' ' ')
-if [ -z "$GAP" ]; then ok ".env.example covers all live compose variables"
-else wn ".env.example lacks live compose variables: $GAP(all have defaults, copy guidance only)"; fi
-
-# Runtime .env and template must declare the same key set (F9 parity).
-ENV_KEYS=$(grep -oE '^[A-Za-z_][A-Za-z0-9_]*' .env 2>/dev/null | sort -u)
-GAP2=$(comm -23 <(echo "$ENV_KEYS") <(echo "$ENVX_KEYS") | tr '\n' ' ')
-if [ -z "$GAP2" ]; then ok ".env and .env.example declare the same variable set"
-else wn ".env has keys missing from .env.example: $GAP2"; fi
 
 # Dead variables must stay gone (F12).
 if grep -E '^[^#]*\$\{PUID' compose.yaml >/dev/null 2>&1; then
@@ -460,15 +440,16 @@ if [ -f /opt/stacks/traefik/.env ]; then
 fi
 
 # ---------------------------------------------------------------- summary
-printf '\n== summary ==\n'
-printf '  PASS=%d  WARN=%d  FAIL=%d\n' "$PASS" "$WARN" "$FAIL"
+section "summary"
+printf '  %sPASS=%d%s  %sWARN=%d%s  %sFAIL=%d%s\n' \
+  "$C_PASS_B" "$PASS" "$C_RESET" "$C_WARN_B" "$WARN" "$C_RESET" "$C_FAIL_B" "$FAIL" "$C_RESET"
 if [ "$FAIL" -gt 0 ]; then
-  printf '  result: FAIL — see [FAIL] items above (details in README.md)\n'
+  printf '  result: %sFAIL%s — see [FAIL] items above (details in README.md)\n' "$C_FAIL_B" "$C_RESET"
   exit 1
 fi
 if [ "$WARN" -gt 0 ]; then
-  printf '  result: WARN — core function OK, review warnings\n'
+  printf '  result: %sWARN%s — core function OK, review warnings\n' "$C_WARN_B" "$C_RESET"
   exit 0
 fi
-printf '  result: OK\n'
+printf '  result: %sOK%s\n' "$C_PASS_B" "$C_RESET"
 exit 0

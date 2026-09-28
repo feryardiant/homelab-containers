@@ -6,6 +6,7 @@ Homelab Docker Compose monorepo: a container-manager suite and deployable stacks
 
 - `managers/` — container-manager suite. Each manager (`arcane/`, `dockhand/`, `dbx/`) is a Compose **fragment**; only `managers/compose.yaml` (anchors + `extends:` + shared `manager-db` Postgres) is ever run. Manager deployment specifics: `managers/README.md`.
 - `stacks/` — deployable stacks, one directory per stack. Specifics for a stack live in that stack's own `README.md`.
+- `scripts/` — project-wide tooling, **local-only** (never deployed); contrast with `stacks/<name>/scripts/`, which runs on the deploy host only.
 
 ## Deployment reality
 
@@ -48,6 +49,7 @@ All runtime work happens on a deploy host, never on this machine.
 ## Workflow
 
 - Validate with `docker compose config -f <file>`. Runtime inspection (`docker compose logs -f`) runs over ssh on the mapped host per *Deployment targets* above — never locally.
+- Convention-check a stack before deploying: `./scripts/validate.sh [stack-name]` (no arg = every stack under `stacks/`). Runs locally, needs only `docker compose config` + `jq`; exit 1 on FAIL findings, warnings alone keep exit 0.
 - Adding a stack = new `stacks/<name>/` dir with `compose.yaml`, `.env.example`, `README.md` per the conventions above.
 
 ## Style
