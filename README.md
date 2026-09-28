@@ -15,6 +15,9 @@
 
 ### Setup
 
+> [!TIP]
+> Validate a stack before deploying: `./scripts/validate.sh [stack-name]` (no argument = every stack under `stacks/`). Runs locally, needs only `docker compose config` + `jq`, and exits `1` when a compose file breaks the repo conventions.
+
 1. Once you have cloned this repo, create a symlink to `/opt`
 
    ```sh
