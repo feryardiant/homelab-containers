@@ -11,7 +11,7 @@
     {
       "title": "Container Count by Stack",
       "type": "stat",
-      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 6 },
       "datasource": "Loki",
       "targets": [
         {
@@ -23,7 +23,7 @@
     {
       "title": "Container Count by Service",
       "type": "stat",
-      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "gridPos": { "x": 6, "y": 0, "w": 18, "h": 6 },
       "datasource": "Loki",
       "targets": [
         {
@@ -33,21 +33,9 @@
       ]
     },
     {
-      "title": "Log Volume by Service (lines/min)",
-      "type": "timeseries",
-      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
-      "datasource": "Loki",
-      "targets": [
-        {
-          "expr": "sum by (service_name) (rate({job=\"docker\"} [5m]))",
-          "legendFormat": "{{service_name}}"
-        }
-      ]
-    },
-    {
       "title": "Error Rate by Service",
       "type": "timeseries",
-      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 8 },
       "datasource": "Loki",
       "targets": [
         {
@@ -59,7 +47,7 @@
     {
       "title": "Warning Rate by Service",
       "type": "timeseries",
-      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 8 },
       "datasource": "Loki",
       "targets": [
         {
@@ -69,9 +57,21 @@
       ]
     },
     {
+      "title": "Log Volume by Service (lines/min)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 14, "w": 24, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum by (service_name) (rate({job=\"docker\"} [5m]))",
+          "legendFormat": "{{service_name}}"
+        }
+      ]
+    },
+    {
       "title": "Recent Container Logs",
       "type": "logs",
-      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 10 },
+      "gridPos": { "x": 0, "y": 22, "w": 24, "h": 10 },
       "datasource": "Loki",
       "targets": [{ "expr": "{job=\"docker\"}", "legendFormat": "{{service_name}}" }]
     }
