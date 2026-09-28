@@ -3,25 +3,28 @@
 Thumbs.db
 Desktop.ini
 .DS_Store
-.cache
 .directory
 ._*
-*~
 *.DS_Store
-*.bak.*
-*.bak
-*.cache
 *.gz
 *.log
 *.old
-*.swp
 *.zip
+
+# Backup, Cache, and Temporary
+.cache
+*~
+*.bak*
+*.bak
+*.cache
+*.swp
 
 # AI Agents
 # --------------------------
 .ai
 .gemini
 .opencode
+.superpowers
 
 # Development files
 # --------------------------
