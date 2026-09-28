@@ -31,6 +31,8 @@ services:
       retries: 3
     labels:
       arcane.icon: traefik
+      prometheus.port: "8080"
+      prometheus.path: "/metrics"
       traefik.enable: true
       traefik.http.routers.traefik.entrypoints: https
       traefik.http.routers.traefik.observability.accessLogs: false

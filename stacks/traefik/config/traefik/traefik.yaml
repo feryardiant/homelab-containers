@@ -48,6 +48,33 @@ providers:
 api:
   dashboard: true
 
+# Metrics configuration
+metrics:
+  otlp:
+    grpc:
+      endpoint: "grafana-tempo:4317"
+      insecure: true
+    # For HTTP instead of gRPC, use:
+    # http:
+    #   endpoint: "grafana-tempo:4318"
+  prometheus:
+    # Enable Prometheus metrics endpoint
+    addEntryPointsLabels: true
+    addServicesLabels: true
+    buckets: [0.1, 0.3, 1.2, 5.0]
+    # The metrics will be available at /metrics on the API port (8080)
+
+# Distributed tracing configuration
+tracing:
+  serviceName: traefik
+  otlp:
+    grpc:
+      endpoint: "grafana-tempo:4317"
+      insecure: true
+    # For HTTP instead of gRPC, use:
+    # http:
+    #   endpoint: "grafana-tempo:4318"
+
 ping:
   entryPoint: http
 
@@ -56,16 +83,18 @@ log:
   level: INFO
 
 accessLog:
-  filePath: /var/log/traefik/access.log
+  # Send access logs to stdout for Docker/Alloy collection
   format: json
   filters:
     statusCodes:
-      # - "200"
       - "400-404"
       - "500-503"
+    retryAttempts: true
+    minDuration: 10ms
   fields:
     names:
       StartUTC: drop
+      ClientUsername: keep
 
 serversTransport:
   insecureSkipVerify: true
