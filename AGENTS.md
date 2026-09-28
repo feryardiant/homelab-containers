@@ -25,6 +25,11 @@ All runtime work happens on a deploy host, never on this machine.
   - several matches, no host named → ask;
   - no match → touch no host: edit, `docker compose config`, then finish with a handoff to the human — *"Here's what you need to deploy and verify once the path is added to `.agents/deployments.jsonc`"* — a checklist of the exact rsync/ssh commands, logs, and URLs.
 - **Deploy** only the mapped dir, e.g. `rsync -a --exclude .env --exclude data/ --exclude logs/ <local>/ <host>:<remote>/`. Never `--delete`, never push `.env` or runtime state — mapped dirs share a schema, not secrets or per-host config. Follow the entry's `deploy` method; if it isn't a method you know, ask.
+- **Keep a mapped pair in shape** — rule of thumb for `deploy: "rsync"` entries:
+  - Prefer the stack's excludes file: `rsync -a --exclude-from=.agents/<name>-deploy-excludes.txt …`. Besides `.env`/runtime state it lists files that exist **only locally** (helper scripts never meant to run on the host).
+  - Deletions never propagate (no `--delete`): remove a stale remote file by hand over ssh and say so in the handoff.
+  - Verify with checksums, not size+mtime: `rsync -a -c --dry-run --itemize-changes --exclude-from=… <local>/ <host>:<remote>/` must print nothing (or only mtime-only `.d..t....` lines); run it reversed to list remote-only files — expected leftovers are backups and runtime state, anything else is drift. For hard proof, md5 both sides of each changed file.
+  - Check `git status` before removing anything from a mapped dir — parts of the tree are untracked or gitignored, so deletions cannot be recovered.
 - **Run and verify over ssh:** `ssh <host> 'cd <remote> && docker compose up -d'`, same shape for `logs`, `ps`, and any stack scripts (`scripts/check.sh`).
 
 ## Compose conventions (apply to everything you add)
@@ -51,4 +56,4 @@ All runtime work happens on a deploy host, never on this machine.
 
 ## AI artifacts
 
-- Store AI-generated plans/specs/scripts in `.agents/`.
+- Store AI-generated artifacts in `.agents/`. **Metadata docs** (plans, specs, ledgers, logs, handoffs) live in `.agents/logs/`; scripts and machine-local config (`.sh`, `grafana-deploy-excludes.txt`, `deployments.jsonc`) stay directly in `.agents/`.
