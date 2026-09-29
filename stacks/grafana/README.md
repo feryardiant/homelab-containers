@@ -92,8 +92,8 @@ Add both labels to every service that exposes a metrics endpoint:
 services:
   myservice:
     labels:
-      prometheus.path: /metrics   # endpoint path (leading slash optional)
-      prometheus.port: "8080"     # container port
+      prometheus.path: /metrics  # endpoint path (leading slash optional)
+      prometheus.port: 8080      # container port
 ```
 
 That is the complete opt-in: Prometheus's single `docker-stacks` job discovers the container and scrapes `<container-ip>:<port><path>`. Target labels match the log stream labels (`project`, `service_name`, `container_name`, `container_image`), so the same selector works in both Prometheus and Loki. Dotted spelling (`prometheus.path`) is canonical; underscored (`prometheus_path`) also works — never both spellings of one label. Like every other stack, join the external `shared` network.
