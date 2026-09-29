@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=https://json.schemastore.org/prometheus.json
+
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
@@ -14,7 +16,7 @@ scrape_configs:
   # canonical; underscored prometheus_path/prometheus_port sanitize to the same
   # meta-label and are accepted too) is discovered via docker_sd.
   # Targets: grafana stack self-scrape + traefik (all 6 label-bearing containers).
-  - job_name: "docker-stacks"
+  - job_name: docker-stacks
     docker_sd_configs:
       - host: unix:///var/run/docker.sock
         refresh_interval: 15s
@@ -23,39 +25,39 @@ scrape_configs:
       # are present and non-empty (non-matching containers are dropped)
       - source_labels: [__meta_docker_container_label_prometheus_path]
         action: keep
-        regex: ".+"
+        regex: .+
       - source_labels: [__meta_docker_container_label_prometheus_port]
         action: keep
-        regex: ".+"
+        regex: .+
       # Scrape address = <network IP>:<prometheus_port label>; if the label is
       # missing the joined value won't match and the default address is kept
       - source_labels: [__meta_docker_network_ip, __meta_docker_container_label_prometheus_port]
         separator: ":"
-        regex: "(.+):(.+)"
-        replacement: "${1}:${2}"
+        regex: (.+):(.+)
+        replacement: ${1}:${2}
         target_label: __address__
       # Metrics path — label value already carries the leading slash
       # ("/metrics" → "/metrics", "metrics" → "/metrics"; missing label keeps default)
       - source_labels: [__meta_docker_container_label_prometheus_path]
         action: replace
         target_label: __metrics_path__
-        regex: "/*(.+)"
-        replacement: "/${1}"
+        regex: /*(.+)
+        replacement: /${1}
       # Target labels unified with Loki log stream labels. Regex '(.+)'
       # guards: non-compose containers keep the job_name fallback (docker-stacks)
       # and simply carry no project/service_name.
       - source_labels: [__meta_docker_container_label_com_docker_compose_project]
-        regex: "(.+)"
+        regex: (.+)
         target_label: job
       - source_labels: [__meta_docker_container_label_com_docker_compose_project]
-        regex: "(.+)"
+        regex: (.+)
         target_label: project
       - source_labels: [__meta_docker_container_label_com_docker_compose_service]
-        regex: "(.+)"
+        regex: (.+)
         target_label: service_name
       # Strip the leading slash from docker's /name so metrics and logs agree
       - source_labels: [__meta_docker_container_name]
-        regex: "/?(.*)"
+        regex: /?(.*)
         target_label: container_name
       - source_labels: [__meta_docker_container_id]
         target_label: container_id

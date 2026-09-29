@@ -1,4 +1,5 @@
 {
+  "$schema": "https://www.schemastore.org/grafana-dashboard-5.x.json",
   "title": "Container Stacks Overview",
   "uid": "container-stacks",
   "tags": ["docker", "containers", "stacks", "logs"],

@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=https://json.schemastore.org/loki.json
+
 auth_enabled: false
 
 server:
@@ -36,9 +38,9 @@ limits_config:
   # a full limit=1000 response (1000 × ~3.2KB incl. JSON/ts overhead) ≈ 3.3MB < 4MB.
   # Truncate (never discard); complete lines remain in docker's json-file logs.
   # 4096 would still fail (≈4.2MB at limit=1000); lower to 2048 if margin runs hot.
-  max_line_size: 3072
+  max_line_size: "3072"
   max_line_size_truncate: true
-  max_line_size_truncate_identifier: "...[truncated]"
+  max_line_size_truncate_identifier: ...[truncated]
 
 table_manager:
   retention_deletes_enabled: true
