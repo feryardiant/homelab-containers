@@ -1,4 +1,5 @@
 {
+  "$schema": "https://www.schemastore.org/grafana-dashboard-5.x.json",
   "title": "OpenWrt",
   "uid": "openwrt",
   "tags": ["openwrt", "network", "dns", "dhcp", "firewall", "wifi"],

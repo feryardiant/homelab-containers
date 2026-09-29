@@ -1,4 +1,5 @@
 {
+  "$schema": "https://www.schemastore.org/grafana-dashboard-5.x.json",
   "title": "Managers Suite",
   "uid": "managers",
   "tags": ["managers", "docker", "containers", "arcane", "dockhand", "dbx", "stacks"],

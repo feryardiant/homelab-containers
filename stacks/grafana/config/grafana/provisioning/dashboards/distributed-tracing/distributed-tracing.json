@@ -1,4 +1,5 @@
 {
+  "$schema": "https://www.schemastore.org/grafana-dashboard-5.x.json",
   "title": "Distributed Tracing",
   "uid": "distributed-tracing",
   "tags": ["tempo", "traces", "otlp", "latency", "errors"],

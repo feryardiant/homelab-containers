@@ -30,9 +30,9 @@ Reverse proxy for all stacks. Publishes wildcard Let's Encrypt certificates via 
       cockpit:
         entryPoints:
           - https
-          rule: Host(`cockpit.{{ env "ROOT_DOMAIN" }}`)
-          service: cockpit
-          tls: {}
+        rule: Host(`cockpit.{{ env "ROOT_DOMAIN" }}`)
+        service: cockpit
+        tls: {}
       # other routers...
           
     services:
