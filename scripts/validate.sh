@@ -151,7 +151,7 @@ validate_stack() {
     if [ -z "$shared_bad" ]; then
       pass "every network named '${C_SECTION}shared${C_RESET}' is external: true"
     else
-      for s in $shared_bad; do fail "network '${C_WARN_B}$s${C_RESET}' resolves to name '${C_SECTION}shared${C_RESET}' but is not external: true" "external shared network"; done
+      for s in $shared_bad; do fail "network '${C_WARN_B}$s${C_RESET}' resolves to name '${C_SECTION}shared${C_RESET}' but is not external: true" "shared not external"; done
     fi
   fi
 
@@ -172,7 +172,7 @@ validate_stack() {
       pass "no named volumes — state lives in bind mounts"
     else
       while IFS= read -r line; do
-        [ -n "$line" ] && fail "named volume on $line — state must be a bind mount inside the stack dir" "use bind mount"
+        [ -n "$line" ] && fail "named volume on $line — state must be a bind mount inside the stack dir" "named volume"
       done <<< "$vols"
     fi
   fi
@@ -191,11 +191,11 @@ validate_stack() {
         | to_entries[] | select(.key | test("^traefik\\.http\\.routers\\..*\\.entrypoints$"))
         | .value] | unique | join(",")')"
       if [ "${rules:-0}" -eq 0 ]; then
-        fail "${C_SECTION}traefik.enable=true${C_RESET} but no router rule label: ${C_SECTION}$s${C_RESET}" "traefik no rule"
+        fail "${C_SECTION}traefik.enable=true${C_RESET} but no router rule label: ${C_SECTION}$s${C_RESET}" "router rule missing"
       elif [ -z "$eps" ]; then
-        fail "${C_SECTION}traefik.enable=true${C_RESET} but no router entrypoints label: ${C_SECTION}$s${C_RESET}" "traefik no entrypoints"
+        fail "${C_SECTION}traefik.enable=true${C_RESET} but no router entrypoints label: ${C_SECTION}$s${C_RESET}" "router entrypoints missing"
       elif [ "$eps" != "https" ]; then
-        fail "router entrypoints must be https for ${C_SECTION}$s${C_RESET} (got: ${C_SECTION}$eps${C_RESET})" "traefik https entrypoints"
+        fail "router entrypoints must be https for ${C_SECTION}$s${C_RESET} (got: ${C_SECTION}$eps${C_RESET})" "entrypoints not https"
       else
         pass "traefik labels complete: ${C_SECTION}$s${C_RESET}"
       fi
@@ -247,7 +247,7 @@ validate_stack() {
     elif [ -n "$du" ]; then
       pass "${C_SECTION}$s${C_RESET} reachable via ${C_SECTION}dockhand.url${C_RESET} ($du)"
     else
-      warn "${C_WARN_B}$s${C_RESET} has no ${C_SECTION}traefik.*${C_RESET} labels, no published ${C_SECTION}ports${C_RESET} and no ${C_SECTION}dockhand.url${C_RESET} label" "url info"
+      warn "${C_WARN_B}$s${C_RESET} has no ${C_SECTION}traefik.*${C_RESET} labels, no published ${C_SECTION}ports${C_RESET} and no ${C_SECTION}dockhand.url${C_RESET} label" "no route exposure"
     fi
   done
 
@@ -260,7 +260,7 @@ validate_stack() {
     pass "no orphan ${C_SECTION}traefik.*${C_RESET} router labels"
   else
     for s in $orph; do
-        warn "$s has ${C_SECTION}traefik.*${C_RESET} router labels but ${C_SECTION}traefik.enable${C_RESET} is not ${C_SECTION}true${C_RESET}" "traefik routing"
+        warn "$s has ${C_SECTION}traefik.*${C_RESET} router labels but ${C_SECTION}traefik.enable${C_RESET} is not ${C_SECTION}true${C_RESET}" "routing not enabled"
     done
   fi
 
@@ -277,7 +277,7 @@ validate_stack() {
     fi
   done < <(printf '%s' "$json" | jq -r '.services | to_entries[] | "\(.key)\t\(.value.image // "")"')
   if [ -z "$badimg" ]; then pass "every image carries an explicit registry prefix"
-  else warn "images without registry ${C_SECTION}prefix:$badimg${C_RESET}" "explicit registry prefix"; fi
+  else warn "images without registry ${C_SECTION}prefix:$badimg${C_RESET}" "registry prefix missing"; fi
 
   # 10 — no :latest (explicit or implicit) tags
   local badtag=""
@@ -289,7 +289,7 @@ validate_stack() {
     fi
   done < <(printf '%s' "$json" | jq -r '.services | to_entries[] | "\(.key)\t\(.value.image // "")"')
   if [ -z "$badtag" ]; then pass "every image pins an explicit tag (no ${C_SECTION}:latest${C_RESET})"
-  else warn "images with ${C_SECTION}:latest${C_RESET} or no ${C_SECTION}tag:$badtag${C_RESET}" "explicit tag"; fi
+  else warn "images with ${C_SECTION}:latest${C_RESET} or no ${C_SECTION}tag:$badtag${C_RESET}" "unpinned image tag"; fi
 
   # 11 — deploy.resources.limits
   local nolim
@@ -299,7 +299,7 @@ validate_stack() {
   else
     local list=""
     for s in $nolim; do list="$list $s"; done
-    warn "no ${C_SECTION}deploy.resources.limits${C_RESET}:$list" "resource limit"
+    warn "no ${C_SECTION}deploy.resources.limits${C_RESET}:$list" "resource limits missing"
   fi
 
   # 12 — arcane.icon label on every service
@@ -310,7 +310,7 @@ validate_stack() {
   else
     local list2=""
     for s in $noicon; do list2="$list2 $s"; done
-    warn "no ${C_SECTION}arcane.icon${C_RESET} label:$list2" "arcane icon"
+    warn "no ${C_SECTION}arcane.icon${C_RESET} label:$list2" "arcane icon missing"
   fi
 }
 
