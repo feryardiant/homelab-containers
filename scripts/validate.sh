@@ -75,8 +75,9 @@ else
 fi
 
 _GROUP_OPEN=0
+
 section() {
-    if [ -v CI ]; then
+    if [ -v GITHUB_ACTIONS ]; then
         if [ "$_GROUP_OPEN" -eq 1 ]; then
             echo "::endgroup::"
             _GROUP_OPEN=0
@@ -88,27 +89,21 @@ section() {
         printf '\n%s== %s ==%s\n' "$C_SECTION" "$*" "$C_RESET";
     fi
 }
-ok()   { printf '  [%sPASS%s] %s\n' "$C_PASS" "$C_RESET" "$*"; PASS=$((PASS+1)); }
-info() {
-    if [ -v CI ]; then
-        # echo "::notice file={name},line={line},endLine={endLine},title={title}::$*"
-        echo "::notice::$*"
-    fi
-    printf '         %s\n' "$*";
-}
-wn() {
-    if [ -v CI ]; then
+pass() { printf '  [%sPASS%s] %s\n' "$C_PASS" "$C_RESET" "$1"; PASS=$((PASS+1)); }
+info() { printf '         %s\n' "$1"; }
+warn() {
+    if [ -v GITHUB_ACTIONS ]; then
         # echo "::warning file={name},line={line},endLine={endLine},title={title}::$*"
-        echo "::warning::$*"
+        if [ -n "${2:-}" ]; then echo "::warning title=$2::$1"; else echo "::warning::$1"; fi
     fi
-    printf '  [%sWARN%s] %s\n' "$C_WARN" "$C_RESET" "$*"; WARN=$((WARN+1));
+    printf '  [%sWARN%s] %s\n' "$C_WARN" "$C_RESET" "$1"; WARN=$((WARN+1));
 }
-bad() {
-    if [ -v CI ]; then
+fail() {
+    if [ -v GITHUB_ACTIONS ]; then
         # echo "::error file={name},line={line},endLine={endLine},title={title}::$*"
-        echo "::error::$*"
+        if [ -n "${2:-}" ]; then echo "::error title=$2::$1"; else echo "::error::$1"; fi
     fi
-    printf '  [%sFAIL%s] %s\n' "$C_FAIL" "$C_RESET" "$*"; FAIL=$((FAIL+1));
+    printf '  [%sFAIL%s] %s\n' "$C_FAIL" "$C_RESET" "$1"; FAIL=$((FAIL+1));
 }
 
 # --------------------------------------------------------------- one stack
@@ -129,13 +124,13 @@ validate_stack() {
   out="$(cd "$dir" && docker compose config --format json 2>"$errf")"; rc=$?
   err="$(cat "$errf" 2>/dev/null)"; rm -f "$errf"
   if [ "$rc" -ne 0 ] || [ -z "$out" ]; then
-    bad "docker compose config failed: $(printf '%s\n%s' "$err" "$out" | head -1)"
+    fail "docker compose config failed: $(printf '%s\n%s' "$err" "$out" | head -1)" "compose config"
     info "config-derived checks below are skipped"
   else
-    ok "docker compose config parses"
+    pass "docker compose config parses"
     json="$out"
     if [ -n "$err" ]; then
-      wn "docker compose config warned: $(printf '%s' "$err" | head -1)"
+      warn "docker compose config warned: $(printf '%s' "$err" | head -1)" "compose config"
       info "config-derived checks below still ran on the parsed JSON"
     fi
   fi
@@ -146,17 +141,17 @@ validate_stack() {
     # so "declared" must be checked against the source YAML, not the JSON.
     if awk '/^networks:/{n=1;next} n&&/^[^# ]/{n=0} n&&/^  default:/{f=1} END{exit !f}' \
          "$dir/compose.yaml" 2>/dev/null; then
-      ok "default network declared under networks:"
+      pass "default network declared under networks:"
     else
-      bad "no ${C_SECTION}networks.default${C_RESET} declared (implicit project default hides intent)"
+      fail "no ${C_SECTION}networks.default${C_RESET} declared (implicit project default hides intent)" "no default network"
     fi
     local shared_bad
     shared_bad="$(printf '%s' "$json" | jq -r '.networks // {}
       | to_entries[] | select((.value.name // .key) == "shared") | select(.value.external != true) | .key')"
     if [ -z "$shared_bad" ]; then
-      ok "every network named '${C_SECTION}shared${C_RESET}' is external: true"
+      pass "every network named '${C_SECTION}shared${C_RESET}' is external: true"
     else
-      for s in $shared_bad; do bad "network '$s' resolves to name 'shared' but is not external: true"; done
+      for s in $shared_bad; do fail "network '${C_WARN_B}$s${C_RESET}' resolves to name '${C_SECTION}shared${C_RESET}' but is not external: true" "external shared network"; done
     fi
   fi
 
@@ -165,8 +160,8 @@ validate_stack() {
   for f in compose.yaml README.md .env.example; do
     [ -e "$dir/$f" ] || missing="$missing $f"
   done
-  if [ -z "$missing" ]; then ok "required files present (${C_SECTION}.yaml${C_RESET}, ${C_SECTION}README.md${C_RESET}, ${C_SECTION}.env.example${C_RESET})"
-  else bad "missing:$missing"; fi
+  if [ -z "$missing" ]; then pass "required files present (${C_SECTION}.yaml${C_RESET}, ${C_SECTION}README.md${C_RESET}, ${C_SECTION}.env.example${C_RESET})"
+  else fail "missing:${C_WARN_B}$missing${C_RESET}" "missing files"; fi
 
   # 4 — no named volumes; state lives in bind mounts
   if [ -n "$json" ]; then
@@ -174,10 +169,10 @@ validate_stack() {
     vols="$(printf '%s' "$json" | jq -r '.services | to_entries[] | .key as $s
       | (.value.volumes // [])[] | select(.type == "volume") | "\($s) \(.target)"')"
     if [ -z "$vols" ]; then
-      ok "no named volumes — state lives in bind mounts"
+      pass "no named volumes — state lives in bind mounts"
     else
       while IFS= read -r line; do
-        [ -n "$line" ] && bad "named volume on $line — state must be a bind mount inside the stack dir"
+        [ -n "$line" ] && fail "named volume on $line — state must be a bind mount inside the stack dir" "use bind mount"
       done <<< "$vols"
     fi
   fi
@@ -196,13 +191,13 @@ validate_stack() {
         | to_entries[] | select(.key | test("^traefik\\.http\\.routers\\..*\\.entrypoints$"))
         | .value] | unique | join(",")')"
       if [ "${rules:-0}" -eq 0 ]; then
-        bad "${C_SECTION}traefik.enable=true${C_RESET} but no router rule label: ${C_SECTION}$s${C_RESET}"
+        fail "${C_SECTION}traefik.enable=true${C_RESET} but no router rule label: ${C_SECTION}$s${C_RESET}" "traefik no rule"
       elif [ -z "$eps" ]; then
-        bad "${C_SECTION}traefik.enable=true${C_RESET} but no router entrypoints label: ${C_SECTION}$s${C_RESET}"
+        fail "${C_SECTION}traefik.enable=true${C_RESET} but no router entrypoints label: ${C_SECTION}$s${C_RESET}" "traefik no entrypoints"
       elif [ "$eps" != "https" ]; then
-        bad "router entrypoints must be https for ${C_SECTION}$s${C_RESET} (got: ${C_SECTION}$eps${C_RESET})"
+        fail "router entrypoints must be https for ${C_SECTION}$s${C_RESET} (got: ${C_SECTION}$eps${C_RESET})" "traefik https entrypoints"
       else
-        ok "traefik labels complete: ${C_SECTION}$s${C_RESET}"
+        pass "traefik labels complete: ${C_SECTION}$s${C_RESET}"
       fi
     done
     [ "$n" -eq 0 ] && info "no service enables traefik routing"
@@ -218,8 +213,8 @@ validate_stack() {
     if [ -n "$live" ]; then
       gap="$(comm -23 <(printf '%s\n' "$live") <(printf '%s\n' "$envx") | tr '\n' ' ')"
     fi
-    if [ -z "$gap" ]; then ok "${C_SECTION}.env.example${C_RESET} declares every ${C_SECTION}\${VAR}${C_RESET} used by ${C_SECTION}compose.yaml${C_RESET}"
-    else bad "${C_SECTION}.env.example${C_RESET} lacks compose variables: ${C_SECTION}$gap${C_RESET}"; fi
+    if [ -z "$gap" ]; then pass "${C_SECTION}.env.example${C_RESET} declares every ${C_SECTION}\${VAR}${C_RESET} used by ${C_SECTION}compose.yaml${C_RESET}"
+    else fail "${C_SECTION}.env.example${C_RESET} lacks compose variables: ${C_SECTION}$gap${C_RESET}" "env example coverage"; fi
 
     if [ -f "$dir/.env" ]; then
       envk="$(grep -oE '^[A-Za-z_][A-Za-z0-9_]*' "$dir/.env" | sort -u)"
@@ -227,8 +222,8 @@ validate_stack() {
         info "local ${C_SECTION}.env${C_RESET} has no keys — parity check skipped"
       else
         gap2="$(comm -23 <(printf '%s\n' "$envk") <(printf '%s\n' "$envx") | tr '\n' ' ')"
-        if [ -z "$gap2" ]; then ok ".env and .env.example declare the same keys"
-        else wn "${C_SECTION}.env${C_RESET} has keys missing from .env.example: $gap2"; fi
+        if [ -z "$gap2" ]; then pass ".env and .env.example declare the same keys"
+        else warn "${C_SECTION}.env${C_RESET} has keys missing from ${C_SECTION}.env.example${C_RESET}: $gap2" "env parity"; fi
       fi
     else
       info "no local ${C_SECTION}.env${C_RESET} — parity check skipped"
@@ -248,11 +243,11 @@ validate_stack() {
     ports="$(printf '%s' "$json" | jq -r --arg s "$s" '(.services[$s].ports // []) | length')"
     du="$(printf '%s' "$json" | jq -r --arg s "$s" '((.services[$s].labels // {})["dockhand.url"]) // ""')"
     if [ "${ports:-0}" -gt 0 ]; then
-      ok "${C_SECTION}$s${C_RESET} reachable via published ports (${C_SECTION}$ports${C_RESET})"
+      pass "${C_SECTION}$s${C_RESET} reachable via published ports (${C_SECTION}$ports${C_RESET})"
     elif [ -n "$du" ]; then
-      ok "${C_SECTION}$s${C_RESET} reachable via ${C_SECTION}dockhand.url${C_RESET} ($du)"
+      pass "${C_SECTION}$s${C_RESET} reachable via ${C_SECTION}dockhand.url${C_RESET} ($du)"
     else
-      wn "${C_WARN_B}$s${C_RESET} has no ${C_SECTION}traefik.*${C_RESET} labels, no published ${C_SECTION}ports${C_RESET} and no ${C_SECTION}dockhand.url${C_RESET} label"
+      warn "${C_WARN_B}$s${C_RESET} has no ${C_SECTION}traefik.*${C_RESET} labels, no published ${C_SECTION}ports${C_RESET} and no ${C_SECTION}dockhand.url${C_RESET} label" "url info"
     fi
   done
 
@@ -262,9 +257,11 @@ validate_stack() {
     | select(((.value.labels // {}) | keys | map(select(test("^traefik\\.http\\."))) | length) > 0)
     | select(((.value.labels // {})["traefik.enable"] // "" | tostring) != "true") | .key')"
   if [ -z "$orph" ]; then
-    ok "no orphan ${C_SECTION}traefik.*${C_RESET} router labels"
+    pass "no orphan ${C_SECTION}traefik.*${C_RESET} router labels"
   else
-    for s in $orph; do wn "$s has ${C_SECTION}traefik.*${C_RESET} router labels but ${C_SECTION}traefik.enable${C_RESET} is not ${C_SECTION}true${C_RESET}"; done
+    for s in $orph; do
+        warn "$s has ${C_SECTION}traefik.*${C_RESET} router labels but ${C_SECTION}traefik.enable${C_RESET} is not ${C_SECTION}true${C_RESET}" "traefik routing"
+    done
   fi
 
   # 9 — explicit registry prefix on every image
@@ -279,8 +276,8 @@ validate_stack() {
       esac
     fi
   done < <(printf '%s' "$json" | jq -r '.services | to_entries[] | "\(.key)\t\(.value.image // "")"')
-  if [ -z "$badimg" ]; then ok "every image carries an explicit registry prefix"
-  else wn "images without registry ${C_SECTION}prefix:$badimg${C_RESET}"; fi
+  if [ -z "$badimg" ]; then pass "every image carries an explicit registry prefix"
+  else warn "images without registry ${C_SECTION}prefix:$badimg${C_RESET}" "explicit registry prefix"; fi
 
   # 10 — no :latest (explicit or implicit) tags
   local badtag=""
@@ -291,29 +288,29 @@ validate_stack() {
       badtag="$badtag $s($ref)"
     fi
   done < <(printf '%s' "$json" | jq -r '.services | to_entries[] | "\(.key)\t\(.value.image // "")"')
-  if [ -z "$badtag" ]; then ok "every image pins an explicit tag (no ${C_SECTION}:latest${C_RESET})"
-  else wn "images with ${C_SECTION}:latest${C_RESET} or no ${C_SECTION}tag:$badtag${C_RESET}"; fi
+  if [ -z "$badtag" ]; then pass "every image pins an explicit tag (no ${C_SECTION}:latest${C_RESET})"
+  else warn "images with ${C_SECTION}:latest${C_RESET} or no ${C_SECTION}tag:$badtag${C_RESET}" "explicit tag"; fi
 
   # 11 — deploy.resources.limits
   local nolim
   nolim="$(printf '%s' "$json" | jq -r '.services | to_entries[]
     | select(.value.deploy.resources.limits == null) | .key')"
-  if [ -z "$nolim" ]; then ok "all services declare ${C_SECTION}deploy.resources.limits${C_RESET}"
+  if [ -z "$nolim" ]; then pass "all services declare ${C_SECTION}deploy.resources.limits${C_RESET}"
   else
     local list=""
     for s in $nolim; do list="$list $s"; done
-    wn "no ${C_SECTION}deploy.resources.limits${C_RESET}:$list"
+    warn "no ${C_SECTION}deploy.resources.limits${C_RESET}:$list" "resource limit"
   fi
 
   # 12 — arcane.icon label on every service
   local noicon
   noicon="$(printf '%s' "$json" | jq -r '.services | to_entries[]
     | select(((.value.labels // {})["arcane.icon"] // "") == "") | .key')"
-  if [ -z "$noicon" ]; then ok "all services carry an ${C_SECTION}arcane.icon${C_RESET} label"
+  if [ -z "$noicon" ]; then pass "all services carry an ${C_SECTION}arcane.icon${C_RESET} label"
   else
     local list2=""
     for s in $noicon; do list2="$list2 $s"; done
-    wn "no ${C_SECTION}arcane.icon${C_RESET} label:$list2"
+    warn "no ${C_SECTION}arcane.icon${C_RESET} label:$list2" "arcane icon"
   fi
 }
 
@@ -329,8 +326,9 @@ done
 
 section "summary"
 printf '  stacks checked: %s%d%s\n' "$C_SECTION" "$checked" "$C_RESET"
-if [ -v CI ]; then
+if [ -v GITHUB_ACTIONS ]; then
     echo "::endgroup::"
+    _GROUP_OPEN=0
 fi
 printf '  %sPASS=%d%s  %sWARN=%d%s  %sFAIL=%d%s\n' \
   "$C_PASS_B" "$PASS" "$C_RESET" "$C_WARN_B" "$WARN" "$C_RESET" "$C_FAIL_B" "$FAIL" "$C_RESET"
