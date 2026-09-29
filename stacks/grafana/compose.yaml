@@ -64,9 +64,9 @@ services:
           memory: 256m
     labels:
       arcane.icon: grafana
-      prometheus.port: "3000"
-      prometheus.path: "/metrics"
       dockhand.order: -1
+      prometheus.port: 3000
+      prometheus.path: /metrics
       traefik.enable: true
       traefik.http.routers.grafana.entrypoints: https
       traefik.http.routers.grafana.observability.accessLogs: false
@@ -87,6 +87,7 @@ services:
     volumes:
       - ./config/prometheus:/etc/prometheus
       - ./data/prometheus:/prometheus/data
+      - /etc/localtime:/etc/localtime:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     healthcheck:
       test: [CMD-SHELL, wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1]
@@ -101,8 +102,8 @@ services:
           memory: 256m
     labels:
       arcane.icon: prometheus
-      prometheus.port: "9090"
-      prometheus.path: "/metrics"
+      prometheus.port: 9090
+      prometheus.path: /metrics
       traefik.enable: true
       traefik.http.routers.prometheus.entrypoints: https
       traefik.http.routers.prometheus.observability.accessLogs: false
@@ -114,6 +115,9 @@ services:
     container_name: grafana-tempo
     restart: unless-stopped
     user: '0'
+    depends_on:
+      prometheus:
+        condition: service_healthy
     command:
       - -config.file=/etc/tempo/config.yaml
     ports:
@@ -125,14 +129,15 @@ services:
     volumes:
       - ./config/tempo:/etc/tempo
       - ./data/tempo:/var/lib/tempo
+      - /etc/localtime:/etc/localtime:ro
     healthcheck:
       test: [CMD, /tempo, -health]
       <<: *healthcheck
     deploy: *deploy
     labels:
       arcane.icon: tempo
-      prometheus.port: "3200"
-      prometheus.path: "/metrics"
+      prometheus.port: 3200
+      prometheus.path: /metrics
       traefik.enable: true
       traefik.http.routers.grafana-tempo.entrypoints: https
       traefik.http.routers.grafana-tempo.observability.accessLogs: false
@@ -158,8 +163,8 @@ services:
     deploy: *deploy
     labels:
       arcane.icon: loki
-      prometheus.port: "3100"
-      prometheus.path: "/metrics"
+      prometheus.port: 3100
+      prometheus.path: /metrics
 
   grafana-alloy:
     image: docker.io/grafana/alloy:v1.9.0
@@ -193,8 +198,8 @@ services:
     deploy: *deploy
     labels:
       arcane.icon: grafana-alloy
-      prometheus.port: "12345"
-      prometheus.path: "/metrics"
+      prometheus.port: 12345
+      prometheus.path: /metrics
       traefik.enable: true
       traefik.http.routers.grafana-alloy.entrypoints: https
       traefik.http.routers.grafana-alloy.observability.accessLogs: false
