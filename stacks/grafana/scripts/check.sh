@@ -33,6 +33,19 @@
 
 set -u
 
+# Colors only on a TTY with NO_COLOR unset, so pipes/logs stay plain.
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+    C_MENTION=$'\033[34m'    # blue
+    C_SECTION=$'\033[1;34m'  # bold blue
+    C_PASS_B=$'\033[1;32m'   # bold green (summary counts / result)
+    C_WARN_B=$'\033[1;33m'   # bold yellow
+    C_FAIL_B=$'\033[1;31m'   # bold red
+    C_RESET=$'\033[0m'
+else
+    C_MENTION=""; C_SECTION=""
+    C_PASS_B=""; C_WARN_B=""; C_FAIL_B=""; C_RESET=""
+fi
+
 usage() {
     printf '%s\n' \
 'check.sh - verify dashboard provisioning and probe every panel query.
@@ -134,9 +147,9 @@ fetch() { # fetch <url> [extra curl args...]
 
 paint() { # paint <pass|warn|fail|none> <text>
     case $1 in
-        pass) printf '\033[1;32m%s\033[0m' "$2" ;;
-        warn) printf '\033[1;33m%s\033[0m' "$2" ;;
-        fail) printf '\033[1;31m%s\033[0m' "$2" ;;
+        pass) printf '%s%s%s' "$C_PASS_B" "$2" "$C_RESET" ;;
+        warn) printf '%s%s%s' "$C_WARN_B" "$2" "$C_RESET" ;;
+        fail) printf '%s%s%s' "$C_FAIL_B" "$2" "$C_RESET" ;;
         *)    printf '%s' "$2" ;;
     esac
 }
@@ -221,12 +234,12 @@ cmd_file() { # cmd_file <dashboard.json> — probe every target expr, by datasou
     | while IFS=$'\t' read -r ds title b64; do
         ds=${ds,,}
         expr=$(printf '%s' "$b64" | base64 -d)
-        printf '== %s: [%s]\n   query: %s\n' "$ds" "$title" "$expr"
+        printf '== %s%s%s: [%s%s%s]\n   query: %s%s%s\n' "$C_SECTION" "$ds" "$C_RESET" "$C_MENTION" "$title" "$C_RESET" "$C_MENTION" "$expr" "$C_RESET"
         case $ds in
             loki)         cmd_probe loki "$expr" ;;
             prometheus)   cmd_probe prom "$expr" ;;
             tempo)        cmd_probe tempo "$expr" ;;
-            *)            printf '   (skipped: datasource %s)\n\n' "$ds" ;;
+            *)            printf '   (skipped: datasource %s%s%s)\n\n' "$C_SECTION" "$ds" "$C_RESET" ;;
         esac
     done
 }
@@ -333,7 +346,7 @@ case "$MODE" in
     file)  cmd_file "$DASH_FILE"; exit 0 ;;
 esac
 
-echo "=== Dashboard Provisioning Status ==="
+printf '%s=== Dashboard Provisioning Status ===%s\n' "$C_SECTION" "$C_RESET"
 echo ""
 
 declare -A local_jsons
@@ -377,7 +390,7 @@ while IFS= read -r spec; do
     fi
     count "$_dep_verdict"
 
-    printf ' - \033[1;36m%s\033[0m %s ' "$_deploy_sum" "$_deploy_path"
+    printf ' - %s%s%s %s ' "$C_MENTION" "$_deploy_sum" "$C_RESET" "$_deploy_path"
     paint "$_dep_verdict" "$_dep_text"
     printf '.\n'
 
@@ -386,15 +399,15 @@ while IFS= read -r spec; do
         _panel_source=$(printf '%s' "$panel" | jq -r 'if (.datasource | type) == "object" then (.datasource.type // "?") else (.datasource // "?") end')
         _panel_type=$(printf '%s' "$panel" | jq -r '.type // "-"')
 
-        printf '   - source: \033[34m%s\033[0m, type: \033[34m%s\033[0m, title: \033[34m%s\033[0m\n' \
-            "$_panel_source" "$_panel_type" "$_panel_title"
+        printf '   - source: %s%s%s, type: %s%s%s, title: %s%s%s\n' \
+            "$C_SECTION" "$_panel_source" "$C_RESET" "$C_MENTION" "$_panel_type" "$C_RESET" "$C_MENTION" "$_panel_title" "$C_RESET"
 
         while IFS= read -r target; do
             _target_expr=$(printf '%s' "$target" | jq -r '.expr // empty')
             _target_legend=$(printf '%s' "$target" | jq -r '.legendFormat // "-"')
 
             if [ -z "$_target_expr" ]; then
-                printf '     - legend: \033[0;36m%s\033[0m, result: (no expr)\n' "$_target_legend"
+                printf '     - legend: %s%s%s, result: (no expr)\n' "$C_MENTION" "$_target_legend" "$C_RESET"
                 continue
             fi
 
@@ -411,20 +424,20 @@ while IFS= read -r spec; do
             esac
             count "$_verdict"
 
-            printf '     - legend: \033[0;36m%s\033[0m, result: ' "$_target_legend"
+            printf '     - legend: %s%s%s, result: ' "$C_MENTION" "$_target_legend" "$C_RESET"
             paint "$_verdict" "$_result"
             printf '\n'
-            printf '       query: \033[0;36m%s\033[0m\n' "$_target_expr"
+            printf '       query: %s%s%s\n' "$C_MENTION" "$_target_expr" "$C_RESET"
         done < <(printf '%s' "$panel" | jq -rc '.targets // [] | .[]')
     done < <(printf '%s' "$spec" | jq -rc '.panels // [] | .[]')
 done < <(printf '%s' "$DASHBOARDS" | jq -rc '.items[] | {annotations: (.metadata.annotations // {}), panels: (.spec.panels // [])}')
 
 echo ""
-echo "== summary =="
-printf '  PASS=%d WARN=%d FAIL=%d\n' "$PASS" "$WARN" "$FAIL"
+printf '%s== summary ==%s\n' "$C_SECTION" "$C_RESET"
+printf '  PASS=%s%d%s WARN=%s%d%s FAIL=%s%d%s\n' "$C_PASS_B" "$PASS" "$C_RESET" "$C_WARN_B" "$WARN" "$C_RESET" "$C_FAIL_B" "$FAIL" "$C_RESET"
 if [ "$FAIL" -gt 0 ]; then
-    printf '  result: \033[1;31m%d FAIL\033[0m\n' "$FAIL"
+    printf '  result: %s%d FAIL%s\n' "$C_FAIL_B" "$FAIL" "$C_RESET"
     exit 1
 fi
-printf '  result: \033[1;32mno failures\033[0m\n'
+printf '  result: %sno failures%s\n' "$C_PASS_B" "$C_RESET"
 exit 0

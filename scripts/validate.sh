@@ -152,7 +152,7 @@ validate_stack() {
         if [ -z "$shared_bad" ]; then
             pass "every network named '${C_MENTION}shared${C_RESET}' is external: true"
         else
-            for s in $shared_bad; do fail "network '${C_WARN_B}$s${C_RESET}' resolves to name '${C_MENTION}shared${C_RESET}' but is not external: true" "shared not external"; done
+            for s in $shared_bad; do fail "network '${C_MENTION}$s${C_RESET}' resolves to name '${C_MENTION}shared${C_RESET}' but is not external: true" "shared not external"; done
         fi
     fi
 
@@ -162,7 +162,7 @@ validate_stack() {
         [ -e "$dir/$f" ] || missing="$missing $f"
     done
     if [ -z "$missing" ]; then pass "required files present (${C_MENTION}.yaml${C_RESET}, ${C_MENTION}README.md${C_RESET}, ${C_MENTION}.env.example${C_RESET})"
-    else fail "missing:${C_WARN_B}$missing${C_RESET}" "missing files"; fi
+    else fail "missing:${C_MENTION}$missing${C_RESET}" "missing files"; fi
 
     # 4 — no named volumes; state lives in bind mounts
     if [ -n "$json" ]; then
@@ -244,11 +244,11 @@ validate_stack() {
         ports="$(printf '%s' "$json" | jq -r --arg s "$s" '(.services[$s].ports // []) | length')"
         du="$(printf '%s' "$json" | jq -r --arg s "$s" '((.services[$s].labels // {})["dockhand.url"]) // ""')"
         if [ "${ports:-0}" -gt 0 ]; then
-            pass "${C_MENTION}$s${C_RESET} reachable via published ports (${C_MENTION}$ports${C_RESET})"
+            pass "${C_SECTION}$s${C_RESET} reachable via published ports (${C_MENTION}$ports${C_RESET})"
         elif [ -n "$du" ]; then
-            pass "${C_MENTION}$s${C_RESET} reachable via ${C_MENTION}dockhand.url${C_RESET} ($du)"
+            pass "${C_SECTION}$s${C_RESET} reachable via ${C_MENTION}dockhand.url${C_RESET} ($du)"
         else
-            warn "${C_WARN_B}$s${C_RESET} has no ${C_MENTION}traefik.*${C_RESET} labels, no published ${C_MENTION}ports${C_RESET} and no ${C_MENTION}dockhand.url${C_RESET} label" "no route exposure"
+            warn "${C_SECTION}$s${C_RESET} has no ${C_MENTION}traefik.*${C_RESET} labels, no published ${C_MENTION}ports${C_RESET} and no ${C_MENTION}dockhand.url${C_RESET} label" "no route exposure"
         fi
     done
 
@@ -261,7 +261,7 @@ validate_stack() {
         pass "no orphan ${C_MENTION}traefik.*${C_RESET} router labels"
     else
         for s in $orph; do
-            warn "$s has ${C_MENTION}traefik.*${C_RESET} router labels but ${C_MENTION}traefik.enable${C_RESET} is not ${C_MENTION}true${C_RESET}" "routing not enabled"
+            warn "${C_SECTION}$s${C_RESET} has ${C_MENTION}traefik.*${C_RESET} router labels but ${C_MENTION}traefik.enable${C_RESET} is not ${C_MENTION}true${C_RESET}" "routing not enabled"
         done
     fi
 
@@ -300,7 +300,7 @@ validate_stack() {
     else
         local list=""
         for s in $nolim; do list="$list $s"; done
-        warn "no ${C_MENTION}deploy.resources.limits${C_RESET}:$list" "resource limits missing"
+        warn "no ${C_MENTION}deploy.resources.limits${C_RESET}:${C_SECTION}$list${C_RESET}" "resource limits missing"
     fi
 
     # 12 — arcane.icon label on every service
@@ -311,7 +311,7 @@ validate_stack() {
     else
         local list2=""
         for s in $noicon; do list2="$list2 $s"; done
-        warn "no ${C_MENTION}arcane.icon${C_RESET} label:$list2" "arcane icon missing"
+        warn "no ${C_MENTION}arcane.icon${C_RESET} label:${C_SECTION}$list2${C_RESET}" "arcane icon missing"
     fi
 }
 

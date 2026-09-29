@@ -6,6 +6,7 @@
 #   --push   also run write probes: Loki sample-age probes (writes a tiny
 #            amount of harmless test data).
 #   --quick  skip log-tail analysis, Grafana API checks and dashboard scans.
+#   Env:     GRAFANA_USER/GRAFANA_PASS — Grafana API auth (default admin/admin).
 #
 # Exit codes: 0 = no FAIL findings, 1 = at least one FAIL, 2 = usage/setup error.
 #
@@ -21,7 +22,7 @@ for arg in "$@"; do
     case "$arg" in
         --push) PUSH=1 ;;
         --quick) QUICK=1 ;;
-        -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,14p' "$STACK_DIR/scripts/audit.sh" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: $arg (see --help)" >&2; exit 2 ;;
     esac
 done
@@ -137,7 +138,7 @@ if [ -z "$PORTS" ]; then
     fail "no host ports published — OTLP (${C_MENTION}4317${C_RESET}/${C_MENTION}4318${C_RESET}) and syslog (${C_MENTION}514/udp${C_RESET}) intake unreachable"
 else
     while IFS= read -r line; do info "host port published — ${C_MENTION}$line${C_RESET}"; done <<< "$PORTS"
-    echo "$PORTS" | grep -q '12345' && warn "alloy UI (12345${C_RESET}) is published on ${C_MENTION}0.0.0.0${C_RESET} — bypasses the Traefik IP allowlist (F13)"
+    echo "$PORTS" | grep -q '12345' && warn "alloy UI (${C_MENTION}12345${C_RESET}) is published on ${C_MENTION}0.0.0.0${C_RESET} — bypasses the Traefik IP allowlist (F13)"
     for p in 4317 4318; do
         if echo "$PORTS" | grep -qE "tcp [0-9]+ -> $p\$"; then
             pass "OTLP port ${C_MENTION}$p${C_RESET} published on host (tempo direct intake, env-configurable)"
@@ -366,9 +367,9 @@ fi
 for c in arcane dockhand dbx; do
     LBL=$(docker inspect "$c" 2>/dev/null | jq -r '.[0].Config.Labels // {} | [to_entries[] | select(.key=="prometheus.path" or .key=="prometheus_path" or .key=="prometheus.port" or .key=="prometheus_port") | "\(.key)=\(.value)"] | join(", ")' 2>/dev/null)
     if [ -n "$LBL" ]; then
-        warn "$c carries metrics-gate labels ($LBL) but serves no /metrics (F5) — recreate from /opt/managers"
+        warn "${C_SECTION}$c${C_RESET} carries metrics-gate labels ($LBL) but serves no /metrics (F5) — recreate from /opt/managers"
     else
-        pass "$c not labeled for scraping (no /metrics endpoint)"
+        pass "${C_SECTION}$c${C_RESET} not labeled for scraping (no /metrics endpoint)"
     fi
 done
 if grep -qE '"__address__" = "(arcane|dockhand|dbx):' config/alloy/config.alloy; then
@@ -380,8 +381,12 @@ fi
 # ---------------------------------------------------------------- grafana api
 if [ "$QUICK" = "0" ]; then
     section "Grafana API (provisioned content)"
-    AUTH=(-u admin:admin)
-    h=$(probe "http://grafana:3000/api/org" "${AUTH[@]}")
+    # content-API auth (env-overridable); the default-credentials probe below
+    # must test admin:admin specifically, so it stays hardcoded
+    GRAFANA_USER="${GRAFANA_USER:-admin}"
+    GRAFANA_PASS="${GRAFANA_PASS:-admin}"
+    AUTH=(-u "$GRAFANA_USER:$GRAFANA_PASS")
+    h=$(probe "http://grafana:3000/api/org" -u admin:admin)
     if [ "${h%% *}" = "200" ]; then
         warn "default credentials admin/admin still active"
     elif [ "${h%% *}" = "401" ] || [ "${h%% *}" = "403" ]; then
@@ -391,24 +396,30 @@ if [ "$QUICK" = "0" ]; then
     fi
 
     DS=$(fetch "http://grafana:3000/api/datasources" "${AUTH[@]}")
-    NDS=$(echo "$DS" | jq 'length' 2>/dev/null || echo 0)
-    if [ "$NDS" = "0" ]; then
-        fail "no datasources readable via API"
+    if ! printf '%s' "$DS" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        # an error object (401 auth failed, 500, ...) is not a datasource list —
+        # counting its keys produced false passes/failures
+        warn "grafana content API unreadable (auth rejected?) — datasources/dashboards checks skipped; set GRAFANA_USER/GRAFANA_PASS"
     else
-        pass "$NDS provisioned datasources"
-        while IFS= read -r uid; do
-            [ -n "$uid" ] || continue
-            name=$(echo "$DS" | jq -r --arg u "$uid" '.[]|select(.uid==$u)|.name')
-            s=$(fetch "http://grafana:3000/api/datasources/uid/$uid/health" "${AUTH[@]}" | jq -r '.status // "?"' 2>/dev/null)
-            if [ "$s" = "OK" ]; then pass "datasource health OK: $name"
-            else fail "datasource health ${s:-?}: $name"; fi
-        done < <(echo "$DS" | jq -r '.[].uid' 2>/dev/null)
-    fi
+        NDS=$(printf '%s' "$DS" | jq 'length' 2>/dev/null || echo 0)
+        if [ "$NDS" = "0" ]; then
+            fail "no datasources readable via API"
+        else
+            pass "$NDS provisioned datasources"
+            while IFS= read -r uid; do
+                [ -n "$uid" ] || continue
+                name=$(printf '%s' "$DS" | jq -r --arg u "$uid" '.[]|select(.uid==$u)|.name' 2>/dev/null)
+                s=$(fetch "http://grafana:3000/api/datasources/uid/$uid/health" "${AUTH[@]}" | jq -r '.status // "?"' 2>/dev/null)
+                if [ "$s" = "OK" ]; then pass "datasource health OK: $name"
+                else fail "datasource health ${s:-?}: $name"; fi
+            done < <(printf '%s' "$DS" | jq -r '.[].uid' 2>/dev/null)
+        fi
 
-    API_DB=$(fetch "http://grafana:3000/api/search?type=dash-db" "${AUTH[@]}" | jq 'length' 2>/dev/null || echo 0)
-    FILE_DB=$(find config/grafana/provisioning/dashboards -name '*.json' | wc -l | tr -d ' ')
-    if [ "$API_DB" = "$FILE_DB" ]; then pass "$API_DB dashboards provisioned (= $FILE_DB JSON files)"
-    else fail "dashboards mismatch: API=$API_DB files=$FILE_DB"; fi
+        API_DB=$(fetch "http://grafana:3000/api/search?type=dash-db" "${AUTH[@]}" | jq 'if type=="array" then length else 0 end' 2>/dev/null || echo 0)
+        FILE_DB=$(find config/grafana/provisioning/dashboards -name '*.json' | wc -l | tr -d ' ')
+        if [ "$API_DB" = "$FILE_DB" ]; then pass "$API_DB dashboards provisioned (= $FILE_DB JSON files)"
+        else fail "dashboards mismatch: API=$API_DB files=$FILE_DB"; fi
+    fi
 
     # Collector-dependent jobs/queries must stay gone (F6): no node-exporter/cadvisor
     # jobs in prometheus.yaml and no node_*/container_* queries in dashboards.
