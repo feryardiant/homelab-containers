@@ -13,7 +13,7 @@ stacks/grafana/
 │   │   └── provisioning/
 │   │       ├── dashboards/   # Dashboard schemas and providers
 │   │       └── datasources/  # Datasource schemas
-│   ├── prometheus/       # scrape config — label-gated docker_sd, the sole metrics collector
+│   ├── prometheus/       # scrape config — label-gated docker_sd + static openwrt job
 │   ├── loki/             # Loki config (schema v13, 30d retention)
 │   ├── tempo/            # Tempo config (OTLP receivers)
 │   └── alloy/            # log collection + parsing pipelines (syslog/docker/journal → Loki)
@@ -26,7 +26,7 @@ stacks/grafana/
 | Service | Image | Role |
 |---|---|---|
 | `grafana` | `docker.io/grafana/grafana:13.2` | Dashboards & query UI; provisions datasources and dashboards from `config/grafana/provisioning/`; state in Postgres |
-| `prometheus` | `docker.io/prom/prometheus:v3` | Metrics storage + **sole metrics collector** — discovers containers via `docker_sd`, gated by two labels (see below) |
+| `prometheus` | `docker.io/prom/prometheus:v3` | Metrics storage + **sole metrics collector** — discovers containers via `docker_sd`, gated by two labels (see below); plus the static `openwrt` job scraping the router (literal `10.10.0.1:9100`) |
 | `loki` | `docker.io/grafana/loki:3.7` | Log aggregation — all container logs, OpenWrt syslog, systemd journal |
 | `grafana-tempo` | `docker.io/grafana/tempo:3.0.0` | Trace storage + OTLP intake for the LAN (ports `4317` gRPC / `4318` HTTP published on the host) |
 | `grafana-alloy` | `docker.io/grafana/alloy:v1.9.0` | **Logs-only** collector: OpenWrt syslog (UDP `514`), Docker logs, systemd journal → Loki |
@@ -96,7 +96,7 @@ services:
       prometheus.port: 8080      # container port
 ```
 
-That is the complete opt-in: Prometheus's single `docker-stacks` job discovers the container and scrapes `<container-ip>:<port><path>`. Target labels match the log stream labels (`project`, `service_name`, `container_name`, `container_image`), so the same selector works in both Prometheus and Loki. Dotted spelling (`prometheus.path`) is canonical; underscored (`prometheus_path`) also works — never both spellings of one label. Like every other stack, join the external `shared` network.
+That is the complete opt-in for containers: Prometheus's `docker-stacks` job discovers the container and scrapes `<container-ip>:<port><path>`. Target labels match the log stream labels (`project`, `service_name`, `container_name`, `container_image`), so the same selector works in both Prometheus and Loki. Dotted spelling (`prometheus.path`) is canonical; underscored (`prometheus_path`) also works — never both spellings of one label. Like every other stack, join the external `shared` network. The router is separate: the static `openwrt` job scrapes `10.10.0.1:9100` straight from the scrape config.
 
 Verify: `up{project="mystack"}` in Grafana (Explore → Prometheus) or the Prometheus *Targets* page.
 
@@ -154,6 +154,7 @@ docker compose up -d              # apply
 ```
 
 - First setup: `cp .env.example .env`, edit, `docker compose up -d`.
+- `config/prometheus/prometheus.yaml` is read directly from its bind mount — apply edits with `docker compose restart prometheus` or `POST /-/reload`.
 - Local copy is the single source of truth (ruling 2026-09-28); validate first with `./scripts/validate.sh grafana` (repo root), then deploy local → remote with `rsync -a --exclude-from=.agents/grafana-deploy-excludes.txt stacks/grafana/ internal.lan:/opt/stacks/grafana/` (never `--delete`; `README.md` is included so both copies stay identical).
 - Only two host-published data ports: Tempo OTLP (`4317`/`4318` tcp) and Alloy syslog (`514` udp); all web UIs are Traefik-only.
 - Loki truncates log lines at **3072 B** (`limits_config.max_line_size` + `max_line_size_truncate`, identifier `...[truncated]`). Giant lines (arcane slow-query SQL was ~163 KB) tripped Loki's 4 MB gRPC query-response cap and broke every raw-line fetch — Drilldown's logs list (`limit=1000`), Explore, check.sh — with `ResourceExhausted`. Full-length lines remain in docker's json-file logs (`docker logs arcane`). Lines ingested before the 2026-09-28 change stay giant until they age out of the query window (~2 h at arcane's rate).
