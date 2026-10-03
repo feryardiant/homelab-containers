@@ -78,6 +78,8 @@ services:
     container_name: prometheus
     restart: unless-stopped
     user: '0'
+    # Explicit flags: the image default points at prometheus.yml (.yml); this
+    # stack ships prometheus.yaml. enable-lifecycle backs POST /-/reload.
     command:
       - --config.file=/etc/prometheus/prometheus.yaml
       - --web.enable-lifecycle

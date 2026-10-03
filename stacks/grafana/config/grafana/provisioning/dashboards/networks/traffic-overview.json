@@ -1,0 +1,60 @@
+{
+  "$schema": "https://www.schemastore.org/grafana-dashboard-5.x.json",
+  "title": "Network Traffic Overview",
+  "uid": "network-traffic",
+  "tags": ["network", "traffic", "lan", "internet"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "version": 1,
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "title": "Outbound Requests per Device (src_ip)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 10 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum by (src_ip) (count_over_time({app=\"kernel\"} | src_ip=~\"10\\\\.10\\\\.0\\\\.[0-9]+\" [5m]))",
+          "legendFormat": "{{src_ip}}",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "title": "Inbound Requests per Device (dst_ip)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 10 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum by (dst_ip) (count_over_time({app=\"kernel\"} | dst_ip=~\"10\\\\.10\\\\.0\\\\.[0-9]+\" [5m]))",
+          "legendFormat": "{{dst_ip}}",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "title": "Inter-Device Traffic (src_ip -> dst_ip)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 10 },
+      "datasource": "Loki",
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": ["lastNotNull"]
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (src_ip, dst_ip) (count_over_time({app=\"kernel\"} | src_ip=~\"10\\\\.10\\\\.0\\\\.[0-9]+\" | dst_ip=~\"10\\\\.10\\\\.0\\\\.[0-9]+\" [5m]))",
+          "legendFormat": "{{src_ip}} -> {{dst_ip}}",
+          "queryType": "range"
+        }
+      ]
+    }
+  ]
+}
