@@ -66,3 +66,9 @@ scrape_configs:
       # instance = container name (set after container_name so it reads the stripped value)
       - source_labels: [container_name]
         target_label: instance
+
+  # OpenWrt router ax53u — prometheus-node-exporter-lua (uhttpd-lua :9100).
+  # Literal LAN IP: Prometheus does no env expansion, so the target lives here.
+  - job_name: openwrt
+    static_configs:
+      - targets: ["10.10.0.1:9100"]

@@ -248,12 +248,13 @@ if [ -n "$TGT" ] && echo "$TGT" | jq -e '.data.activeTargets' >/dev/null 2>&1; t
         warn "scrape pool docker-stacks has zero discovered targets (docker.sock permissions? F3)"
     fi
     POOLS=$(echo "$TGT" | jq -r '[.data.activeTargets[].scrapePool]|unique|join(", ")')
-    if [ "$POOLS" = "docker-stacks" ]; then
-        pass "single scrape pool (docker-stacks) owns all targets"
+    if [ "$POOLS" = "docker-stacks, openwrt" ]; then
+        pass "scrape pools (docker-stacks, openwrt) own all targets"
     else
-        warn "unexpected scrape pools active: $POOLS (design: docker-stacks only)"
+        warn "unexpected scrape pools active: $POOLS (design: docker-stacks + openwrt)"
     fi
-    # Baseline 6 = grafana stack ×5 (grafana, loki, tempo, alloy, prometheus) + traefik.
+    # Baseline 6 = grafana stack ×5 (grafana, loki, tempo, alloy, prometheus) + traefik
+    # (+1 openwrt router target = 7 today); the >=6 check below is unchanged.
     if [ "$TOT" -ge 6 ]; then pass "$TOT active targets (baseline 6 = grafana stack ×5 + traefik)"
     else warn "$TOT active targets — baseline is 6 (grafana ×5 + traefik); a labeled container is missing"; fi
     # Jobs that must stay gone: no phantom collectors (F6), no manager-suite (F5).
@@ -424,6 +425,9 @@ if [ "$QUICK" = "0" ]; then
     # Collector-dependent jobs/queries must stay gone (F6): no node-exporter/cadvisor
     # jobs in prometheus.yaml and no node_*/container_* queries in dashboards.
     HAS_NODE=$(grep -cE "job_name: '(node-exporter|cadvisor)'" config/prometheus/prometheus.yaml || true)
+    # The router exporter (job_name: openwrt) ships node_* as a real collector;
+    # node_* dashboard queries are backed while that job is configured.
+    HAS_OPENWRT=$(grep -cE 'job_name: openwrt' config/prometheus/prometheus.yaml || true)
     # container_name (log/target label) is legitimate — strip it before matching
     # against collector metrics (container_memory_*, container_cpu_*, ...).
     BROKEN=""
@@ -439,9 +443,13 @@ if [ "$QUICK" = "0" ]; then
         warn "node-exporter/cadvisor jobs reintroduced but no collectors ship with this stack (F6)"; F6_OK=0
     fi
     if [ -n "$BROKEN" ]; then
-        warn "dashboards querying node_*/container_* with no collector: $BROKEN (F6)"; F6_OK=0
+        if [ "$HAS_OPENWRT" -gt 0 ]; then
+            info "node_* dashboard queries in $BROKEN backed by job openwrt (router exporter) (F6)"
+        else
+            warn "dashboards querying node_*/container_* with no collector: $BROKEN (F6)"; F6_OK=0
+        fi
     fi
-    [ "$F6_OK" = "1" ] && pass "no collector-dependent jobs or dashboard queries (F6)"
+    [ "$F6_OK" = "1" ] && pass "no unbacked collector-dependent jobs or dashboard queries (F6)"
 fi
 
 # ---------------------------------------------------------------- traefik/host

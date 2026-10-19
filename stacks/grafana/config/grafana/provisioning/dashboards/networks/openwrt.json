@@ -10,21 +10,109 @@
   "time": { "from": "now-6h", "to": "now" },
   "panels": [
     {
-      "title": "DHCP Events",
+      "title": "CPU & Memory %",
       "type": "timeseries",
-      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
-      "datasource": "Loki",
+      "gridPos": { "x": 0, "y": 0, "w": 18, "h": 6 },
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "percent" } },
       "targets": [
         {
-          "expr": "sum by (dhcp_action) (count_over_time({app=\"dnsmasq-dhcp\"} | regexp \"^(?P<dhcp_action>DHCP[A-Z]+)\\\\((?P<dhcp_iface>[^)]+)\\\\) (?:(?P<dhcp_ip>\\\\S+) )?(?P<dhcp_mac>\\\\S+)\" [5m]))",
-          "legendFormat": "{{dhcp_action}}"
+          "expr": "100 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100",
+          "legendFormat": "CPU"
+        },
+        {
+          "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100",
+          "legendFormat": "Memory"
         }
       ]
     },
     {
-      "title": "Active DHCP Leases",
+      "title": "Storage used %",
+      "type": "gauge",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 6 },
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "percent" } },
+      "targets": [
+        {
+          "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"/overlay\"} / node_filesystem_size_bytes{mountpoint=\"/overlay\"})",
+          "legendFormat": "{{mountpoint}}"
+        }
+      ]
+    },
+    {
+      "title": "Throughput",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 8 },
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
+      "targets": [
+        {
+          "expr": "sum(rate(node_network_transmit_bytes_total{device=~\"wan|lan1\"}[1m]))",
+          "legendFormat": "↑ WAN"
+        },
+        {
+          "expr": "sum(rate(node_network_receive_bytes_total{device=~\"wan|lan1\"}[1m]))",
+          "legendFormat": "↓ WAN"
+        },
+        {
+          "expr": "sum(rate(node_network_transmit_bytes_total{device=\"br-lan\"}[1m]))",
+          "legendFormat": "↑ LAN"
+        },
+        {
+          "expr": "sum(rate(node_network_receive_bytes_total{device=\"br-lan\"}[1m]))",
+          "legendFormat": "↓ LAN"
+        },
+        {
+          "expr": "sum(rate(node_network_transmit_bytes_total{device=\"br-guest\"}[1m]))",
+          "legendFormat": "↑ Guest"
+        },
+        {
+          "expr": "sum(rate(node_network_receive_bytes_total{device=\"br-guest\"}[1m]))",
+          "legendFormat": "↓ Guest"
+        }
+      ]
+    },
+    {
+      "title": "WiFi Associations",
+      "type": "logs",
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "{app=\"hostapd\"} | regexp \"(?P<wifi_event>AP-STA-(CONNECTED|DISCONNECTED)|STA .* IEEE 802\\\\.11: (?P<wifi_state>associated|authenticated|disassociated|deauthenticated))\""
+        }
+      ]
+    },
+    {
+      "title": "WAN out per device (eval)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 14, "w": 12, "h": 8 },
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (src)(rate(node_nat_traffic{src=~\"10\\\\.10\\\\.0\\\\..+\"}[1m])))",
+          "legendFormat": "{{src}}"
+        }
+      ]
+    },
+    {
+      "title": "WAN in per device (eval)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 14, "w": 12, "h": 8 },
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "Bps" } },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (dest)(rate(node_nat_traffic{dest=~\"10\\\\.10\\\\.0\\\\..+\"}[1m])))",
+          "legendFormat": "{{dest}}"
+        }
+      ]
+    },
+    {
+      "title": "DHCP Leases",
       "type": "table",
-      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "gridPos": { "x": 0, "y": 22, "w": 12, "h": 8 },
       "datasource": "Loki",
       "targets": [
         {
@@ -35,10 +123,40 @@
       ]
     },
     {
+      "title": "Traffic per-client",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 22, "w": 12, "h": 8 },
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "bits" } },
+      "targets": [
+        {
+          "expr": "topk(10, wifi_station_receive_kilobits_per_second * 1000)",
+          "legendFormat": "↓ {{mac}}"
+        },
+        {
+          "expr": "topk(10, wifi_station_transmit_kilobits_per_second * 1000)",
+          "legendFormat": "↑ {{mac}}"
+        }
+      ]
+    },
+    {
       "title": "DNS Queries - Top Domains",
-      "type": "barchart",
-      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "type": "table",
+      "gridPos": { "x": 0, "y": 30, "w": 14, "h": 8 },
       "datasource": "Loki",
+      "transformations": [
+        { "id": "labelsToFields", "options": { "mode": "columns" } },
+        { "id": "merge", "options": {} },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true },
+            "renameByName": { "Value": "Queries", "Value #A": "Queries", "top domains": "Queries" },
+            "indexByName": { "dns_domain": 0, "Value": 1, "Value #A": 1 }
+          }
+        },
+        { "id": "sortBy", "options": { "sort": [{ "field": "Queries", "desc": true }] } }
+      ],
       "targets": [
         {
           "expr": "topk(20, sum by (dns_domain) (count_over_time({app=~\"dnsmasq|dnscrypt-proxy\"} |~ \"query\\\\[|forwarded |cached |reply |config \" | regexp \"^(?:\\\\d+ \\\\S+/\\\\d+ )?(?P<dns_action>query|forwarded|cached|reply|config)(?:\\\\[(?P<dns_qtype>[A-Za-z0-9]+)\\\\])? (?P<dns_domain>\\\\S+)\" | dns_domain =~ \".+\" [6h])))",
@@ -50,20 +168,28 @@
     {
       "title": "DNS Query Types",
       "type": "piechart",
-      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "gridPos": { "x": 14, "y": 30, "w": 10, "h": 8 },
       "datasource": "Loki",
       "targets": [
         {
           "expr": "sum by (dns_qtype) (count_over_time({app=~\"dnsmasq|dnscrypt-proxy\"} |= \"query[\" | regexp \"^(?:\\\\d+ \\\\S+/\\\\d+ )?(?P<dns_action>query|forwarded|cached|reply|config)(?:\\\\[(?P<dns_qtype>[A-Za-z0-9]+)\\\\])? (?P<dns_domain>\\\\S+)\" | dns_qtype =~ \".+\" [6h]))",
           "legendFormat": "{{dns_qtype}}",
-          "queryType": "instant"
+          "queryType": "range"
         }
-      ]
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": ["percent"]
+        }
+      }
     },
     {
       "title": "Firewall Drops",
       "type": "timeseries",
-      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "gridPos": { "x": 0, "y": 38, "w": 12, "h": 8 },
       "datasource": "Loki",
       "targets": [
         {
@@ -75,7 +201,7 @@
     {
       "title": "Top Source IPs (Firewall)",
       "type": "barchart",
-      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "gridPos": { "x": 12, "y": 38, "w": 12, "h": 8 },
       "datasource": "Loki",
       "targets": [
         {
@@ -86,51 +212,116 @@
       ]
     },
     {
-      "title": "WiFi Associations",
-      "type": "timeseries",
-      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "title": "DHCP Events",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 46, "w": 12, "h": 8 },
       "datasource": "Loki",
       "targets": [
         {
-          "expr": "sum by (wifi_event, wifi_state) (count_over_time({app=\"hostapd\"} | regexp \"(?P<wifi_event>AP-STA-(CONNECTED|DISCONNECTED)|STA .* IEEE 802\\\\.11: (?P<wifi_state>associated|authenticated|disassociated|deauthenticated))\" [5m]))",
-          "legendFormat": "{{wifi_event}} {{wifi_state}}"
+          "expr": "{app=\"dnsmasq-dhcp\"} | regexp \"^(?P<dhcp_action>DHCP[A-Z]+)\\\\((?P<dhcp_iface>[^)]+)\\\\) (?:(?P<dhcp_ip>\\\\S+) )?(?P<dhcp_mac>\\\\S+)\""
         }
       ]
     },
     {
+      "title": "SSH Events",
+      "type": "logs",
+      "gridPos": { "x": 12, "y": 46, "w": 12, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "{app=\"dropbear\"} | regexp \"(?P<db_event>Child connection from|auth succeeded|Bad password attempt|Login attempt|bad signature|Too-long password|rejected|is locked|blank password|Exit \\\\(|Pubkey auth|Password auth)\""
+        }
+      ]
+    },
+    {
+      "title": "Load",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 54, "w": 8, "h": 6 },
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [
+        {
+          "expr": "node_load1",
+          "legendFormat": "load1"
+        },
+        {
+          "expr": "node_load5",
+          "legendFormat": "load5"
+        },
+        {
+          "expr": "node_load15",
+          "legendFormat": "load15"
+        }
+      ]
+    },
+    {
+      "title": "Conntrack entries",
+      "type": "timeseries",
+      "gridPos": { "x": 8, "y": 54, "w": 8, "h": 6 },
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [
+        {
+          "expr": "node_nf_conntrack_entries",
+          "legendFormat": "entries"
+        },
+        {
+          "expr": "node_nf_conntrack_entries_limit",
+          "legendFormat": "limit"
+        }
+      ]
+    },
+    {
+      "title": "Radio temperatures",
+      "type": "gauge",
+      "gridPos": { "x": 16, "y": 54, "w": 8, "h": 6 },
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 90 }
+            ]
+          },
+          "unit": "celsius"
+        }
+      },
+      "targets": [
+        {
+          "expr": "node_hwmon_temp_celsius",
+          "legendFormat": "{{chip}}"
+        }
+      ],
+      "options": {
+        "barWidthFactor": 0.6,
+        "endpointMarker": "point",
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "segmentSpacing": 0.3,
+        "shape": "gauge",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": false,
+        "sizing": "auto",
+        "sparkline": true,
+        "textMode": "auto"
+      }
+    },
+    {
       "title": "MWAN3 Interface Status",
       "type": "table",
-      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+      "gridPos": { "x": 0, "y": 62, "w": 24, "h": 6 },
       "datasource": "Loki",
       "targets": [
         {
           "expr": "sum by (mwan3_iface, mwan3_state, mwan3_score) (count_over_time({app=\"mwan3track\"} | regexp \"^(?:Check \\\\((?P<mwan3_check>[a-z]+)\\\\) (?P<mwan3_result>failed|success) for target \\\"(?P<mwan3_target>[^\\\"]+)\\\" on interface (?P<mwan3_iface>\\\\S+) \\\\((?P<mwan3_device>[^)]+)\\\\)\\\\. Current score: (?P<mwan3_score>\\\\d+)|Lost (?P<mwan3_lost>\\\\d+) ping\\\\(s\\\\) on interface (?P<mwan3_iface2>\\\\S+) \\\\((?P<mwan3_device2>[^)]+)\\\\)\\\\. Current score: (?P<mwan3_score2>\\\\d+)|Interface (?P<mwan3_iface3>\\\\S+) \\\\((?P<mwan3_device3>[^)]+)\\\\) is (?P<mwan3_state>.+)|Execute (?P<mwan3_event>connected|disconnected) event on interface (?P<mwan3_iface4>\\\\S+) \\\\((?P<mwan3_device4>[^)]+)\\\\))$\" [6h]))",
           "legendFormat": "{{mwan3_iface}}",
           "queryType": "instant"
-        }
-      ]
-    },
-    {
-      "title": "dnscrypt-proxy Actions",
-      "type": "timeseries",
-      "gridPos": { "x": 0, "y": 32, "w": 12, "h": 8 },
-      "datasource": "Loki",
-      "targets": [
-        {
-          "expr": "sum by (dns_action) (count_over_time({app=\"dnscrypt-proxy\"} | regexp \"^(?:time:(?P<dns_ts>\\\\d+)\\\\thost:(?P<dns_client>[^\\\\t]+)\\\\tmessage:(?P<dns_domain>[^\\\\t]+)\\\\ttype:(?P<dns_qtype>[^\\\\t]+)\\\\treturn:(?P<dns_return>[^\\\\t]+)\\\\tcached:(?P<dns_cached>\\\\d+)\\\\tduration:(?P<dns_duration>\\\\d+)\\\\tserver:(?P<dns_server>[^\\\\t]*)|time:(?P<dns_ts2>\\\\d+)\\\\thost:(?P<dns_client2>[^\\\\t]+)\\\\tmessage:(?P<dns_domain2>[^\\\\t]+)\\\\ttype:(?P<dns_qtype2>[^\\\\t]+)|time:(?P<dns_ts3>\\\\d+)\\\\thost:(?P<dns_client3>[^\\\\t]+)\\\\tqname:(?P<dns_domain3>[^\\\\t]+)\\\\tmessage:(?P<dns_reason>.*)|^\\\\[(?P<dns_ts4>[^\\\\]]+)\\\\]\\\\t(?P<dns_client4>[^\\\\t]+)\\\\t(?P<dns_domain4>[^\\\\t]+)\\\\t(?P<dns_reason2>.*))$\" [5m]))",
-          "legendFormat": "{{dns_action}}"
-        }
-      ]
-    },
-    {
-      "title": "Dropbear SSH Events",
-      "type": "timeseries",
-      "gridPos": { "x": 12, "y": 32, "w": 12, "h": 8 },
-      "datasource": "Loki",
-      "targets": [
-        {
-          "expr": "sum by (db_event) (count_over_time({app=\"dropbear\"} | regexp \"(?P<db_event>Child connection from|auth succeeded|Bad password attempt|Login attempt|bad signature|Too-long password|rejected|is locked|blank password|Exit \\\\(|Pubkey auth|Password auth)\" [5m]))",
-          "legendFormat": "{{db_event}}"
         }
       ]
     }
